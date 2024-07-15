@@ -1,0 +1,2 @@
+dist/weaverlet-0.2.0.tar.gz
+dash-bootstrap-components<1.0
