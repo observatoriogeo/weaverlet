@@ -68,7 +68,7 @@ class EchoComponent(WeaverletComponent):
 
 greeting_component = EchoComponent()
 wapp = WeaverletApp(root_component=greeting_component)
-wapp.app.run_server()
+wapp.app.run()
 ```
 
 Here’s a simple example to show how to set up a basic Weaverlet application made of two dashboards (pages):
@@ -121,7 +121,7 @@ router_component = SimpleRouterComponent(
 )
 
 wapp = WeaverletApp(root_component=router_component)
-wapp.app.run_server()
+wapp.app.run()
 ```
 
 For more detailed usage, please refer to the examples folder.

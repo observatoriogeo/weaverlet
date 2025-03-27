@@ -1,6 +1,6 @@
 # pyright: reportMissingImports=false
 
-import dash_html_components as html
+from dash import html
 from ..base import WeaverletComponent, Identifier, DEFAULT_COMPONENT_NAME
 
 

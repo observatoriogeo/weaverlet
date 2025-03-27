@@ -113,4 +113,4 @@ wapp = WeaverletApp(root_component=router,
                     title='Simple Weaverlet + DBC app',
                     external_stylesheets=[dbc.themes.COSMO])
 
-wapp.app.run_server()
+wapp.app.run()

@@ -60,4 +60,4 @@ router_component = SimpleRouterComponent(
 )
 
 wapp = WeaverletApp(root_component=router_component)
-wapp.app.run_server(port=8089)
+wapp.app.run(port=8089)

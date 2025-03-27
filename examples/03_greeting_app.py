@@ -12,4 +12,4 @@ class GreetingComponent(WeaverletComponent):
  
 greeting_component = GreetingComponent(greeting_name='Oscar')
 wapp = WeaverletApp(root_component=greeting_component)
-wapp.app.run_server(port=8089)
+wapp.app.run(port=8089)

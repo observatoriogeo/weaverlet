@@ -3,9 +3,8 @@ import string
 import random
 from collections import OrderedDict
 from .logger import logger
-from dash_extensions.enrich import Input, Output, Trigger, State, ServersideOutput
+from dash_extensions.enrich import Input, Output, Trigger, State
 from dash_extensions.enrich import Dash
-from jupyter_dash import JupyterDash
 
 COMPONENT_IDS_LENGTH = 7
 DEFAULT_COMPONENT_NAME = 'unnamed'
@@ -16,9 +15,6 @@ def SignalInput(signal):
 
 def SignalOutput(signal):
     return Output(signal.signal_id, signal.signal_attr)
-
-def ServersideSignalOutput(signal):
-    return ServersideOutput(signal.signal_id, signal.signal_attr)
 
 def SignalTrigger(signal):
     return Trigger(signal.signal_id, signal.signal_attr)
@@ -153,13 +149,10 @@ class ComponentsOrderedDict(OrderedDict, ABC):
 
 class WeaverletApp():
 
-    def __init__(self, root_component, context={}, prevent_initial_callbacks=True, suppress_callback_exceptions=True, jupyter_mode=False, **kwargs):
+    def __init__(self, root_component, context={}, prevent_initial_callbacks=True, suppress_callback_exceptions=True, **kwargs):
         self.root_component = root_component
                 
-        if jupyter_mode:
-            self.app = JupyterDash(**kwargs)
-        else:
-            self.app = Dash(**kwargs)        
+        self.app = Dash(**kwargs)        
         
         self.context = context        
                 

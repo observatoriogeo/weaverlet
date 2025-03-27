@@ -51,4 +51,4 @@ main_page = MainPageComponent(brand='Brand of page')
 wapp = WeaverletApp(root_component=main_page,
                     title='Simple Weaverlet + DBC app',
                     external_stylesheets=[dbc.themes.BOOTSTRAP])
-wapp.app.run_server()
+wapp.app.run()

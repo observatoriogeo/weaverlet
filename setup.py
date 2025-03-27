@@ -21,10 +21,9 @@ setup(
     long_description_content_type="text/markdown",
     url="",
     install_requires=[        
-        'Flask==2.0.2',
-        'werkzeug==2.0.0',
-        'dash==2.0.0',
-        'dash_extensions==0.0.65',                
-        'jupyter-dash==0.4.2'        
+        'Flask>=1.0.4,<3.1',
+        'werkzeug<3.1',
+        'dash==3.0.1',
+        'dash_extensions==1.0.20',                   
     ]
 )

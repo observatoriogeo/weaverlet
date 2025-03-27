@@ -1,8 +1,7 @@
 # pyright: reportMissingImports=false, reportMissingModuleSource=false
 
 from flask import session
-import dash_html_components as html
-import dash_core_components as dcc
+from dash import dcc, html
 from dash_extensions.enrich import Input, Output, State
 from ..base import RouterComponent, ComponentsDict, Identifier, ComponentsDict, WeaverletException, DEFAULT_COMPONENT_NAME
 from ..logger import logger

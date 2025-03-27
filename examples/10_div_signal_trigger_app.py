@@ -43,4 +43,4 @@ class SignalTriggerComponent(WeaverletComponent):
 signal_trigger_component = SignalTriggerComponent()
    
 wapp = WeaverletApp(root_component=signal_trigger_component)
-wapp.app.run_server()
+wapp.app.run()

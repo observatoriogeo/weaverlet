@@ -2,8 +2,7 @@
 
 import dash
 from weaverlet.components.signal import SignalComponent
-import dash_core_components as dcc
-import dash_html_components as html
+from dash import dcc, html
 from ..base import WeaverletComponent, Identifier, DEFAULT_COMPONENT_NAME, WeaverletException
 from dash_extensions.enrich import Input, Output, State, Trigger
 from ..logger import logger
