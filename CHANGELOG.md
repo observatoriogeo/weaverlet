@@ -68,7 +68,13 @@ where it matters.
   handlers and similar uses without any extra wiring.
 - **`assets_folder` auto-resolves** to the directory of the user's main script,
   so `dashExtensions_default.js` (and any user-authored asset) is served by
-  Dash without configuration. Override with
+  Dash without configuration. After resolving, `WeaverletApp` also re-dumps
+  the `dash_extensions.javascript.assign()` namespace into that directory —
+  important because `assign()` writes to a CWD-relative path by default,
+  which doesn't match Dash's served path when the script is run from a
+  different working directory (common with `uv run`, IDEs, and test
+  runners). Without this re-dump, `dash-leaflet` style handlers and similar
+  uses fail with "No match for function0". Override with
   `WeaverletApp(..., assets_folder="...")` if needed.
 - **`WeaverletApp` exposes `title`, `external_stylesheets`, `assets_folder`**
   as named keyword arguments. Other Dash kwargs continue to flow through via

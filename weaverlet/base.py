@@ -267,6 +267,21 @@ class WeaverletApp:
         else:
             self.app = DashProxy(__name__, **kwargs)
 
+        # `dash_extensions.javascript.assign(...)` writes its JS to
+        # `./assets/dashExtensions_default.js` — relative to CWD, not to
+        # the script. When the user runs from a different CWD (e.g. from
+        # an IDE, a uv subprocess, or a test runner), Dash ends up serving
+        # an empty assets dir and downstream libraries (dash-leaflet style
+        # handlers, etc.) fail with "No match for function0". Re-dump the
+        # assigned namespace into the resolved assets_folder so the JS
+        # actually lives where Dash will look for it.
+        try:
+            from dash_extensions.javascript import _default_name_space
+            if _default_name_space.f_map:
+                _default_name_space.dump(assets_folder)
+        except ImportError:
+            pass
+
         # Walk the tree once: propagate context and run initialize().
         logger.info("[WeaverletApp.__init__] propagating context and initializing components ...")
         for comp in self.root_component._wlt_walk():

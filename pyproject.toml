@@ -56,6 +56,9 @@ packages = ["weaverlet"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+markers = [
+    "browser: end-to-end test that boots a Dash app and drives Chromium via Playwright. Requires `playwright install chromium`. Skip with `-m 'not browser'`.",
+]
 filterwarnings = [
     # dash-extensions emits a DeprecationWarning about pkg_resources on import
     "ignore::DeprecationWarning:dash_extensions",
