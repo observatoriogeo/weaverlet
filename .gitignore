@@ -291,3 +291,10 @@ CLAUDE.md
 # meaningful for the library repo; users' downstream apps may or may not
 # want their own assets/ tracked.
 /assets/
+
+.pypirc
+
+# Library convention: don't commit uv.lock. Applications (top-level
+# projects) commit it for reproducibility; libraries let downstream
+# consumers resolve fresh against their own constraint sets.
+uv.lock

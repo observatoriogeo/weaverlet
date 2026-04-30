@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/FullLogo_Transparent_NoBuffer.png" width="375" height="275" alt="Weaverlet" title="Weaverlet">
+  <img src="FullLogo_Transparent_NoBuffer.png" width="375" height="275" alt="Weaverlet" title="Weaverlet">
 </p>
 
 <p align="center">

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "weaverlet"
 version = "0.3.0"
 description = "Slim, server-side, component-driven framework on top of Plotly Dash."
-readme = "README.md"
+dynamic = ["readme"]
 license = "MIT"
 requires-python = ">=3.12"
 authors = [
@@ -42,12 +42,20 @@ dev = [
 Homepage = "https://github.com/observatoriogeo/weaverlet"
 Issues = "https://github.com/observatoriogeo/weaverlet/issues"
 
+[tool.hatch.metadata.hooks.custom]
+# README.md uses a relative image path so GitHub renders the logo with
+# full transparency (GitHub bypasses its camo proxy for same-repo files).
+# This hook rewrites the path to an absolute jsDelivr URL at build time
+# so PyPI also renders it. See hatch_build.py.
+path = "hatch_build.py"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "weaverlet",
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
+    "hatch_build.py",
 ]
 
 [tool.hatch.build.targets.wheel]
