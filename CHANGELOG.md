@@ -42,6 +42,23 @@ where it matters.
   `visibility:hidden` (canvas survives even WebGL-strict libraries); other
   routes use `display:none`. Default is `keep_mounted=False` (unchanged
   behavior — drop-in replacement for 0.2 routers).
+- **`AuthRouterComponent(keep_mounted=True, preserve_path=...)`** — same
+  state-preservation feature for the auth-gated router. Routes are
+  pre-rendered with placeholder values (`user=None`, `protected_route=""`);
+  a separate callback re-renders the login wrapper's children with the
+  actual `protected_route` whenever an unauthenticated visit hits a
+  login-required route, so the legacy login-redirect pattern keeps working
+  in keep_mounted mode. Apps that need the live `user` value should read
+  `flask.session[user_session_key]` from inside their callbacks rather
+  than capturing `user` from `get_layout`.
+- **Aliasing under `keep_mounted=True`**. `routes={"/": page_a, "/home": page_a}`
+  no longer raises `DuplicateIdError`; both paths share a single canonical
+  wrapper. The same generalization underlies the shared-`not_found` handling.
+- **Dynamic 404**. When `keep_mounted=True` and the URL doesn't match any
+  route, the not-found wrapper's children are re-rendered with the live
+  pathname — so a `f"Page {pathname} not found"` template displays the
+  actual URL the user typed instead of the empty-string placeholder used
+  at startup.
 - **WebGL-safe shared `not_found`.** If `not_found_page_component` is the
   same instance as one of the routes, the router reuses that route's wrapper
   instead of mounting a duplicate (no more `DuplicateIdError`).

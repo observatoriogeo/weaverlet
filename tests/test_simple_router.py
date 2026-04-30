@@ -31,6 +31,23 @@ class _NotFound(WeaverletComponent):
         return html.Div(f"404@{pathname}", id=self.d)
 
 
+def _capture_callbacks(router):
+    """Register `router`'s callbacks against a fake app and return them in
+    registration order."""
+    captured: list = []
+
+    class _CapApp:
+        def callback(self, *args, **kwargs):
+            def deco(fn):
+                captured.append(fn)
+                return fn
+
+            return deco
+
+    router.register_callbacks(_CapApp())
+    return captured
+
+
 # -- legacy mode (keep_mounted=False) -----------------------------------------
 
 def test_legacy_router_layout_is_minimal():
@@ -182,6 +199,103 @@ def test_keep_mounted_independent_not_found_gets_its_own_wrapper():
     assert router._not_found_wrapper_id is not None
 
 
+def test_keep_mounted_aliased_routes_share_one_wrapper():
+    """Two paths pointing at the same instance must share a single wrapper —
+    otherwise the same Identifier-bearing layout would mount twice."""
+    home = _Page("home")
+    about = _Page("about")
+    router = SimpleRouterComponent(
+        routes={"/": home, "/home": home, "/about": about},
+        not_found_page_component=_NotFound(),
+        keep_mounted=True,
+    )
+    # Aliased paths "/" and "/home" point at the same wrapper id.
+    assert router._route_wrapper_ids["/"] == router._route_wrapper_ids["/home"]
+    # "/about" gets its own wrapper.
+    assert router._route_wrapper_ids["/about"] != router._route_wrapper_ids["/"]
+    # Only two unique components → two unique paths in iteration order.
+    assert router._unique_paths == ["/", "/about"]
+    # Layout renders without DuplicateIdError.
+    app = WeaverletApp(router)
+    rendered = str(app.app.layout)
+    # "home" appears exactly once in the DOM despite being mapped at two paths.
+    assert rendered.count("'home'") == 1 or rendered.count('"home"') == 1
+
+
+def test_keep_mounted_aliased_routes_navigate_to_canonical_wrapper():
+    """Navigating to either an alias or the canonical path makes the
+    canonical wrapper visible."""
+    home = _Page("home")
+    about = _Page("about")
+    router = SimpleRouterComponent(
+        routes={"/": home, "/home": home, "/about": about},
+        not_found_page_component=_NotFound(),
+        keep_mounted=True,
+    )
+    toggle_views = _capture_callbacks(router)[0]
+
+    # Visiting an alias makes the *canonical* wrapper (home) visible.
+    styles = toggle_views("/home")
+    home_style = styles[0]  # home is the first unique_path
+    assert home_style.get("visibility") == "visible"
+
+    # Visiting the canonical path produces the same result.
+    styles_canonical = toggle_views("/")
+    assert styles_canonical[0] == home_style
+
+
+def test_keep_mounted_preserve_path_alias_normalizes_to_canonical():
+    """If the caller passes an aliased preserve_path, it should normalize to
+    the alias's canonical so the rest of the wrapper logic stays consistent."""
+    home = _Page("home")
+    router = SimpleRouterComponent(
+        routes={"/": home, "/home": home, "/about": _Page("about")},
+        not_found_page_component=_NotFound(),
+        keep_mounted=True,
+        preserve_path="/home",  # alias of "/"
+    )
+    assert router.preserve_path == "/"
+
+
+def test_keep_mounted_dynamic_404_rerenders_with_actual_pathname():
+    """The not_found wrapper should re-render with the live pathname on
+    unmatched routes — fixes the 'Page  not found' double-space issue
+    where pre-render uses pathname=''."""
+    from dash.exceptions import PreventUpdate
+
+    router = SimpleRouterComponent(
+        routes={"/": _Page("home")},
+        not_found_page_component=_NotFound(),
+        keep_mounted=True,
+    )
+    callbacks = _capture_callbacks(router)
+    # toggle_views is registered first, dynamic-404 second.
+    assert len(callbacks) == 2
+    update_404 = callbacks[1]
+
+    # Unmatched pathname: callback returns the re-rendered NotFound layout.
+    out = update_404("/missing")
+    assert "404@/missing" in out.children
+
+    # Matched pathname: PreventUpdate (the wrapper is hidden, no need to update).
+    with pytest.raises(PreventUpdate):
+        update_404("/")
+
+
+def test_keep_mounted_dynamic_404_skipped_when_not_found_shared():
+    """When not_found shares a wrapper with a route, no separate dynamic-404
+    callback is registered."""
+    home = _Page("home")
+    router = SimpleRouterComponent(
+        routes={"/": home, "/other": _Page("other")},
+        not_found_page_component=home,  # shared
+        keep_mounted=True,
+    )
+    callbacks = _capture_callbacks(router)
+    # Only toggle_views is registered — no dynamic-404 callback.
+    assert len(callbacks) == 1
+
+
 def test_keep_mounted_toggle_callback_visible_path_styles():
     home = _Page("home")
     about = _Page("about")
@@ -190,20 +304,9 @@ def test_keep_mounted_toggle_callback_visible_path_styles():
         not_found_page_component=_NotFound(),
         keep_mounted=True,
     )
-    captured = {}
+    toggle_views = _capture_callbacks(router)[0]
 
-    class _CapApp:
-        def callback(self, *args, **kwargs):
-            def deco(fn):
-                captured["fn"] = fn
-                return fn
-
-            return deco
-
-    router.register_callbacks(_CapApp())
-    fn = captured["fn"]
-
-    styles = fn("/")
+    styles = toggle_views("/")
     # routes order: ['/', '/about'] then optional not_found wrapper.
     home_style, about_style = styles[0], styles[1]
     # '/' is the preserve_path AND is visible -> _VISIBLE_STYLE (visibility:visible).
@@ -220,19 +323,8 @@ def test_keep_mounted_toggle_callback_unknown_path_shows_not_found():
         not_found_page_component=nf,
         keep_mounted=True,
     )
-    captured = {}
-
-    class _CapApp:
-        def callback(self, *a, **kw):
-            def deco(fn):
-                captured["fn"] = fn
-                return fn
-
-            return deco
-
-    router.register_callbacks(_CapApp())
-    fn = captured["fn"]
-    styles = fn("/nowhere")
+    toggle_views = _capture_callbacks(router)[0]
+    styles = toggle_views("/nowhere")
     # The trailing style is the not_found wrapper, which should be visible.
     not_found_style = styles[-1]
     assert not_found_style.get("visibility") == "visible"
@@ -247,18 +339,8 @@ def test_keep_mounted_toggle_callback_with_use_prefix():
         use_prefix=True,
     )
     router._wlt_context = {"prefix": "/app"}
-    captured = {}
-
-    class _CapApp:
-        def callback(self, *a, **kw):
-            def deco(fn):
-                captured["fn"] = fn
-                return fn
-
-            return deco
-
-    router.register_callbacks(_CapApp())
-    styles = captured["fn"]("/app/about")
+    toggle_views = _capture_callbacks(router)[0]
+    styles = toggle_views("/app/about")
     # '/about' should be the visible one — and since it's not preserve_path,
     # it gets the overlay style (position absolute, zIndex 2).
     about_style = styles[1]

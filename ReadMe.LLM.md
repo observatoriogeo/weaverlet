@@ -154,9 +154,11 @@ Never compare or pattern‑match on it.
 
 The `preserve_path` route uses `visibility:hidden` when inactive (canvas survives even WebGL‑strict libraries); other routes use `display:none` (lighter, cleaner flow).
 
-**Constraint when `keep_mounted=True`:** every `routes` entry must map to a **distinct component instance**. Aliasing two paths to the same instance (e.g. `{"/": page_a, "/a": page_a}`) duplicates that instance's `Identifier`‑bearing layout in the DOM and triggers `DuplicateIdError`. With `keep_mounted=False` aliasing is fine.
+**Aliasing under `keep_mounted=True` is supported.** Multiple paths can map to the same component instance — `{"/": page_a, "/home": page_a}` is fine; the router detects this and reuses a single canonical wrapper for all aliased paths, so the same `Identifier`‑bearing layout never mounts twice. The first path encountered for an instance becomes its canonical path; if you set `preserve_path` to an alias, it is normalized to the canonical.
 
-**Edge case the router handles:** if `not_found_page_component` is the same instance as one of the routes, the router reuses that route's wrapper instead of mounting a duplicate.
+**Dynamic 404 under `keep_mounted=True`.** When the URL doesn't match any route and `not_found_page_component` is its own distinct instance, the router re-renders that wrapper's children with the live `pathname` — so `f"Page {pathname} not found"` shows the actual URL instead of the empty-string placeholder used at startup. When `not_found_page_component` shares an instance with a route, this dynamic re-render is skipped (the matching route's wrapper handles display).
+
+**Edge case the router handles:** if `not_found_page_component` is the same instance as one of the routes (e.g. "404 falls back to home"), the router reuses that route's wrapper.
 
 ```python
 SimpleRouterComponent(
@@ -266,7 +268,7 @@ When information is missing or ambiguous, ask concise questions:
 - Callbacks defined outside `register_callbacks(self, app)` of the owning component.
 - Direct DOM or component mutation outside of Dash properties.
 - Using `app.run_server(...)` (removed in Dash 4 — use `app.run(...)`).
-- Aliasing two `routes` keys to the same component instance when `keep_mounted=True`.
+- (Removed in 0.3.0+: the aliasing-under-`keep_mounted` restriction is gone — multiple paths can point at the same instance now and share one wrapper.)
 
 </Rules>
 
@@ -588,7 +590,7 @@ wapp.app.run(port=8089)
 - Page components may declare any subset of `(pathname, hash, href, search)` in `get_layout`; the router passes only what is declared.
 - Always provide a `not_found_page_component`.
 - The default `keep_mounted=False` means each page renders only when active. To preserve state across navigation, see Example 14.
-- Aliasing (`/` and `/page_a` both pointing to the same `PageA()` instance) is fine in `keep_mounted=False`. With `keep_mounted=True` it would raise `DuplicateIdError` — use distinct instances or distinct routes.
+- Aliasing (`/` and `/page_a` both pointing to the same `PageA()` instance) is supported in both modes. Under `keep_mounted=True`, aliased paths share a single wrapper automatically.
 
 ---
 
@@ -921,7 +923,7 @@ WeaverletApp(root_component=router, title="Simple Weaverlet + DBC app",
 **Notes for the LLM:**
 - Learn combining DBC navigation with Weaverlet routers.
 - Recognize the typical composition: `Navbar` + `Router` + `Page`.
-- Aliasing `/` and `/a` to distinct `Page("Brand", "# Page A")` instances is OK here because each call to `Page(...)` is a fresh instance. With `keep_mounted=True`, the same rule about distinct instances applies.
+- Aliasing `/` and `/a` to distinct `Page("Brand", "# Page A")` instances is OK here. Under `keep_mounted=True`, mapping multiple paths to the *same* instance is also supported — they share one canonical wrapper.
 
 ---
 
@@ -1365,6 +1367,8 @@ class AuthRouterComponent(RouterComponent):
         user_session_key: str = "user",
         login_route: str = "/login",
         use_prefix: bool = False,
+        keep_mounted: bool = False,
+        preserve_path: str | None = None,
         name: str = "unnamed",
     ): ...
     def get_layout(self) -> "dash.html.Div": ...
@@ -1376,7 +1380,8 @@ class AuthRouterComponent(RouterComponent):
 - Auth pages often include a `RedirectComponent` to bounce back after login.
 - `user_session_key` is read/written in `flask.session`.
 - Pages may declare any subset of `(pathname, hash, href, search, user, protected_route)` in `get_layout(...)`.
-- `keep_mounted` is **not** yet supported on `AuthRouterComponent` (planned for 0.3.x).
+- `keep_mounted=True` is supported (same shape as on `SimpleRouterComponent`) — but with one trade-off: pre-rendered protected routes get `user=None` baked in at startup. Components that need the live `user` value should read `flask.session[user_session_key]` from inside their callbacks rather than capturing the `user` arg from `get_layout`. The login wrapper's children are re-rendered on each protected-route redirect so the `protected_route` capture pattern keeps working.
+- Aliasing and dynamic 404 work the same way as on `SimpleRouterComponent` (see §6.a).
 
 ---
 
@@ -1666,7 +1671,8 @@ class Other(WeaverletComponent):
 class NF(WeaverletComponent):
     def get_layout(self): return html.Div("Not found")
 
-# IMPORTANT: each route maps to a *distinct* instance — no aliasing under keep_mounted=True.
+# Aliasing is supported — multiple paths can map to the same instance and
+# share one wrapper. Here each route uses a distinct instance.
 router = SimpleRouterComponent(
     routes={"/": Counter(), "/other": Other()},
     not_found_page_component=NF(),
@@ -1895,7 +1901,7 @@ gunicorn app:application -w 2 -b 0.0.0.0:8080
 - ❌ Mutating components/DOM directly inside callbacks (only update props).
 - ❌ Using `wapp.app.run_server(...)` — Dash 4 removed it; use `wapp.app.run(...)`.
 - ❌ Using legacy `import dash_html_components as html` / `import dash_core_components as dcc` — use `from dash import html, dcc`.
-- ❌ Aliasing two `routes` keys to the same component instance with `keep_mounted=True`.
+- (Removed: in 0.3.0+ the router auto-shares wrappers across aliased paths, so this is no longer an anti-pattern.)
 
 </Patterns>
 
@@ -2015,7 +2021,7 @@ To elicit high‑quality Weaverlet code from an LLM, prompts should include:
 | **Runnable Output** | Application runs and serves a layout without modification. |
 | **Identifier Safety** | No hardcoded string IDs. |
 | **Signal Accuracy** | Correct use of `SignalInput`, `SignalOutput`, `SignalTrigger`. |
-| **Router Integrity** | URLs map correctly to components; no instance aliasing under `keep_mounted=True`. |
+| **Router Integrity** | URLs map correctly to components, including aliased paths sharing one wrapper under `keep_mounted=True`. |
 | **Modern Dash usage** | No `dash.Dash()`, no `app.run_server`, no legacy `dash_html_components`/`dash_core_components` imports. |
 
 ---
