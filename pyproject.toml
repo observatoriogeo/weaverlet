@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "weaverlet"
-version = "0.3.0"
+version = "0.3.1"
 description = "Slim, server-side, component-driven framework on top of Plotly Dash."
 dynamic = ["readme"]
 license = "MIT"
@@ -28,7 +28,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-jupyter = ["dash[jupyter]>=4.1"]
 examples = [
     "dash-bootstrap-components>=2.0,<3.0",
     "dash-mantine-components>=2.0,<3.0",

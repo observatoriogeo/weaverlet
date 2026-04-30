@@ -122,6 +122,11 @@ def test_keep_mounted_preserves_counter_state_across_routes(
         # testing).
         _click_visible("Go to B")
         page.wait_for_url("**/b")
+        # `wait_for_url` returns as soon as the URL changes; but the
+        # toggle_views Dash callback (which flips wrapper styles) is
+        # asynchronous, so we wait for Page B's content to actually be
+        # visible before clicking into it.
+        page.locator("h2", has_text="Page B").wait_for(state="visible")
 
         # Click Page B's counter once.
         _click_visible("Click me", role="button")
@@ -130,6 +135,7 @@ def test_keep_mounted_preserves_counter_state_across_routes(
         # Navigate back to "/" the same SPA-style way.
         _click_visible("Go to A")
         page.wait_for_url(fixture_app_url + "/")
+        page.locator("h2", has_text="Page A").wait_for(state="visible")
 
         # Page A's counter should STILL show "clicks: 3" — that's
         # keep_mounted=True doing its job (the component was hidden but

@@ -106,8 +106,14 @@ Optional extras:
 | Extra | Pulls in | Use when |
 |---|---|---|
 | `weaverlet[examples]` | `dash-bootstrap-components`, `dash-mantine-components` | Running the bundled examples 11–14 |
-| `weaverlet[jupyter]` | `dash[jupyter]` | Constructing `WeaverletApp(jupyter_mode=True)` |
 | `weaverlet[dev]` | `pytest`, `pytest-playwright` | Hacking on Weaverlet itself |
+
+**Jupyter:** Dash 4 has built-in Jupyter support, no extra needed. Construct your `WeaverletApp` normally and pass `jupyter_mode='inline'` (or `'tab'` / `'external'`) to `.app.run()`:
+
+```python
+wapp = WeaverletApp(root_component=...)
+wapp.app.run(jupyter_mode='inline')
+```
 
 ## Quick start
 

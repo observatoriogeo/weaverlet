@@ -256,16 +256,19 @@ class WeaverletApp:
         kwargs.update(dash_kwargs)
 
         if jupyter_mode:
-            try:
-                from jupyter_dash import JupyterDash
-            except ImportError as exc:
-                raise ImportError(
-                    "jupyter_mode=True requires the 'jupyter' extra. "
-                    "Install with `pip install weaverlet[jupyter]`."
-                ) from exc
-            self.app = JupyterDash(__name__, **kwargs)
-        else:
-            self.app = DashProxy(__name__, **kwargs)
+            raise TypeError(
+                "WeaverletApp(jupyter_mode=True) was removed in 0.3.1. "
+                "Dash 4 has built-in Jupyter support that does not require "
+                "a separate JupyterDash class — construct WeaverletApp "
+                "normally and pass jupyter_mode='inline' (or 'tab' / "
+                "'external') to .app.run() instead:\n"
+                "\n"
+                "    wapp = WeaverletApp(root_component=...)\n"
+                "    wapp.app.run(jupyter_mode='inline')\n"
+                "\n"
+                "No extras are required; the integration ships with Dash."
+            )
+        self.app = DashProxy(__name__, **kwargs)
 
         # `dash_extensions.javascript.assign(...)` writes its JS to
         # `./assets/dashExtensions_default.js` — relative to CWD, not to

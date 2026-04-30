@@ -1,4 +1,4 @@
-"""WeaverletApp — boot, context propagation, assets_folder, jupyter_mode."""
+"""WeaverletApp — boot, context propagation, assets_folder, jupyter migration."""
 from __future__ import annotations
 
 import os
@@ -126,22 +126,19 @@ def test_suppress_callback_exceptions_can_be_disabled():
     assert app.app.config.suppress_callback_exceptions is False
 
 
-def test_jupyter_mode_without_extra_raises_helpful_error(monkeypatch):
-    """jupyter_mode=True with no jupyter_dash should raise ImportError naming the extra."""
-    # Force the import to fail even if the package happens to be installed.
-    import builtins
-
-    real_import = builtins.__import__
-
-    def fake_import(name, *args, **kwargs):
-        if name == "jupyter_dash":
-            raise ImportError("no module")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-
-    with pytest.raises(ImportError, match="weaverlet\\[jupyter\\]"):
+def test_jupyter_mode_true_raises_migration_error():
+    """`jupyter_mode=True` was removed in 0.3.1 — the kwarg is now a no-op
+    when False (default) and raises a TypeError pointing users at Dash 4's
+    built-in `app.run(jupyter_mode='inline')` when True."""
+    with pytest.raises(TypeError, match="jupyter_mode='inline'"):
         WeaverletApp(_Trivial(), jupyter_mode=True)
+
+
+def test_jupyter_mode_false_is_a_no_op():
+    """Default behavior unchanged; keep_mounted-shaped legacy code that
+    explicitly passed jupyter_mode=False keeps working."""
+    app = WeaverletApp(_Trivial(), jupyter_mode=False)
+    assert app.app is not None
 
 
 def test_router_as_root_does_not_explode_on_layout():

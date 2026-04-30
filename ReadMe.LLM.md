@@ -1314,7 +1314,7 @@ class WeaverletApp:
 ```
 **Notes:**
 - `assets_folder` auto-resolves to `dirname(sys.modules['__main__'].__file__) + "/assets"` so `dash_extensions.javascript.assign()` works without manual wiring.
-- `jupyter_mode=True` requires `pip install weaverlet[jupyter]`; otherwise raises `ImportError` with the install hint.
+- `jupyter_mode=True` was removed in 0.3.1 — Dash 4 ships built-in Jupyter support that doesn't need a separate class. Construct `WeaverletApp` normally and pass `jupyter_mode='inline'` (or `'tab'` / `'external'`) to `wapp.app.run()` instead. No extras required. Passing `jupyter_mode=True` to `WeaverletApp` raises a `TypeError` with this migration message; passing `False` (the default) is a no-op.
 - Internally walks the DAG once via `WeaverletComponent._wlt_walk()` to propagate context, run `initialize()`, and register callbacks.
 
 ---
@@ -1944,7 +1944,7 @@ Optional extras:
 
 | Extra | Adds |
 |:--|:--|
-| `weaverlet[jupyter]` | `dash[jupyter] >= 4.1` (for `jupyter_mode=True`) |
+| `weaverlet[jupyter]` | (removed in 0.3.1) — Dash 4's built-in `app.run(jupyter_mode='inline')` covers this now |
 | `weaverlet[examples]` | DBC + DMC for the `examples/` folder |
 | `weaverlet[dev]` | pytest, pytest-playwright |
 

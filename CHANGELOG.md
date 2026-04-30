@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.1 — 2026-04-30
+
+Patch release. Fixes the `weaverlet[jupyter]` extra and `WeaverletApp(jupyter_mode=True)` path, both of which were broken on arrival in 0.3.0:
+
+- `pyproject.toml` declared `jupyter = ["dash[jupyter]>=4.1"]`, but **Dash 4.x has no `jupyter` extra** (declared extras: `async`, `ci`, `dev`, `testing`, `celery`, `diskcache`, `compress`, `cloud`, `ag-grid`). Installing `weaverlet[jupyter]` was a silent no-op.
+- `WeaverletApp(jupyter_mode=True)` did `from jupyter_dash import JupyterDash`, but the standalone `jupyter_dash` package was archived in 2022 and Dash 4 absorbed Jupyter integration into core (as `dash.jupyter_dash`, exposed as a singleton instance). The import always failed, even after installing the (non-existent) extra.
+
+### Migration
+
+Dash 4 ships built-in Jupyter support that doesn't need a separate `JupyterDash` class anymore. Construct `WeaverletApp` normally and pass `jupyter_mode='inline'` (or `'tab'` / `'external'`) to `.app.run()`:
+
+```python
+wapp = WeaverletApp(root_component=...)
+wapp.app.run(jupyter_mode='inline')
+```
+
+No extras required.
+
+### Breaking changes (vs 0.3.0)
+
+- **`weaverlet[jupyter]` extra removed.** It never installed anything useful; `pip install weaverlet[jupyter]` will now error out, but the migration path above doesn't need any extra at all.
+- **`WeaverletApp(jupyter_mode=True)` raises `TypeError`** with a migration message pointing at `app.run(jupyter_mode=...)`. The default `jupyter_mode=False` (or omitting it) is unchanged.
+
+---
+
 ## 0.3.0 — 2026-04-29
 
 First major refresh since 0.2.0 (2024). Modernizes the dependency stack and

@@ -1,6 +1,6 @@
 """Weaverlet — slim, server-side, component-driven framework on top of Plotly Dash."""
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 from .base import (
     ComponentsDict,
