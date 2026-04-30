@@ -1,6 +1,4 @@
-# pyright: reportMissingImports=false
-
-import dash_core_components as dcc
+from dash import dcc
 from ..base import WeaverletComponent, Identifier, DEFAULT_COMPONENT_NAME
 
 

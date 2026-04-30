@@ -281,3 +281,7 @@ bh_unicode_properties.cache
 GitHub.sublime-settings
 
 NOTES.txt
+
+CLAUDE.md
+.claude/
+.context/

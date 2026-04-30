@@ -1,11 +1,8 @@
-# pyright: reportMissingImports=false
-
 import dash
-from weaverlet.components.signal import SignalComponent
-import dash_core_components as dcc
-import dash_html_components as html
-from ..base import WeaverletComponent, Identifier, DEFAULT_COMPONENT_NAME, WeaverletException
+from dash import html, dcc
 from dash_extensions.enrich import Input, Output, State, Trigger
+from .signal import SignalComponent
+from ..base import WeaverletComponent, Identifier, DEFAULT_COMPONENT_NAME, WeaverletException
 from ..logger import logger
 
 class StoreComponentOp():

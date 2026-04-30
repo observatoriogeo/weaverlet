@@ -1,0 +1,95 @@
+# Changelog
+
+## 0.3.0 — 2026-04-29
+
+First major refresh since 0.2.0 (2024). Modernizes the dependency stack and
+adds WebGL-safe routing while keeping the public API backwards-compatible
+where it matters.
+
+### Breaking changes
+
+- **Drop Python < 3.12.** The package no longer installs on older interpreters.
+- **Drop hard pins** on Flask, werkzeug, dash, dash_extensions, jupyter-dash.
+  The triple-pin in 0.2.0 made Weaverlet unresolvable in any modern environment.
+  Dependencies are now declared as open ranges (`dash>=4.1.0,<5.0.0`,
+  `dash-extensions>=1.0.0,<3.0.0`); Flask/werkzeug are resolved transitively.
+- **`jupyter-dash` is now optional.** Install with `pip install weaverlet[jupyter]`
+  if you pass `WeaverletApp(..., jupyter_mode=True)`. Otherwise importing
+  `weaverlet` no longer pulls in `jupyter-dash`.
+- **Build system switched** from `setup.py` (setuptools) to `pyproject.toml`
+  (PEP 621 / hatchling). Existing install commands (`pip install weaverlet`,
+  `pip install -e .`) continue to work.
+- **`Identifier` id format changed** from `{hex_id}-{name}-{attr}` to
+  `{ClassName}_{attr}_{hex_id_of_instance}`. IDs are opaque and only used
+  symbolically as `self.<identifier>`, so user code is unaffected — but any
+  code that compared the *string form* of an id will break.
+- **`get_page_root()` removed.** The old per-router tree walk that assigned
+  page roots to each route's children was unused and added complexity. If you
+  relied on it, file an issue.
+- **`StoreComponent` requires the dash-extensions multiplexer/group** to
+  register multiple callbacks against the same `Output`. This worked in 0.2
+  via dash-extensions 0.0.65; in 1.x/2.x it is provided by `DashProxy` (which
+  Weaverlet now uses by default). No action required if you use
+  `WeaverletApp`; raw Dash users need to pick up `DashProxy` themselves.
+
+### New features
+
+- **`SimpleRouterComponent(keep_mounted=True, preserve_path=...)`** for
+  WebGL-safe multipage. When `keep_mounted=True`, every route is rendered at
+  startup and the router toggles `style` instead of unmounting — preserving
+  the canvas state of `dash-sylvereye` (PixiJS), `dash-leaflet`, and Plotly
+  WebGL backends across navigation. The `preserve_path` route uses
+  `visibility:hidden` (canvas survives even WebGL-strict libraries); other
+  routes use `display:none`. Default is `keep_mounted=False` (unchanged
+  behavior — drop-in replacement for 0.2 routers).
+- **WebGL-safe shared `not_found`.** If `not_found_page_component` is the
+  same instance as one of the routes, the router reuses that route's wrapper
+  instead of mounting a duplicate (no more `DuplicateIdError`).
+- **`WeaverletApp` uses `dash_extensions.enrich.DashProxy`** under the hood,
+  which keeps `dash_extensions.javascript.assign()` functions registered in
+  `window.dashExtensions.default.*`. This unblocks `dash-leaflet` style
+  handlers and similar uses without any extra wiring.
+- **`assets_folder` auto-resolves** to the directory of the user's main script,
+  so `dashExtensions_default.js` (and any user-authored asset) is served by
+  Dash without configuration. Override with
+  `WeaverletApp(..., assets_folder="...")` if needed.
+- **`WeaverletApp` exposes `title`, `external_stylesheets`, `assets_folder`**
+  as named keyword arguments. Other Dash kwargs continue to flow through via
+  `**dash_kwargs`.
+- **Routed `get_layout()` is permissive about its signature.** Components no
+  longer have to declare `get_layout(self, pathname, hash, href, search)` to
+  be routable — declare just the kwargs you need (`(self)`, `(self, pathname)`,
+  `(self, pathname, hash, href, search, user)`, etc.) and the router will
+  pass only what your signature accepts. Implemented via
+  `weaverlet.base._call_with_router_kwargs`.
+- **`weaverlet.__version__`** exposes the version string.
+- **Top-level re-exports** — `from weaverlet import WeaverletComponent,
+  Identifier, WeaverletApp, SimpleRouterComponent, ...` now works directly,
+  no need to drill into `weaverlet.base` / `weaverlet.components`.
+
+### Internal
+
+- Component children are now discovered by introspecting `__dict__` on each
+  walk (with cycle detection via `visited`), instead of pre-computing
+  `_children` once and walking it four times. The `Components{List,Dict,
+  OrderedDict}` ABCs are still recognized for collection-style children.
+- All component modules migrated from `import dash_html_components as html` /
+  `import dash_core_components as dcc` to `from dash import html, dcc`.
+- `ServersideOutput` (dash-extensions 0.0.65) is gone; the helper
+  `ServersideSignalOutput()` now returns a plain `Output` and callers wrap
+  the *return value* with `Serverside(...)` — the dash-extensions 1.x/2.x
+  pattern. `Serverside` is re-exported from `weaverlet`.
+- `DetatchedComponentRef` renamed to `DetachedComponentRef` (typo fix);
+  the original name is preserved as an alias.
+
+### Compat
+
+The following public names continue to import and behave the same way as in
+0.2.0: `WeaverletComponent`, `Identifier`, `WeaverletApp`, `RouterComponent`,
+`SimpleRouterComponent`, `AuthRouterComponent`, `StoreComponent`,
+`StoreComponentOp`, `SignalComponent`, `DivSignalComponent`,
+`EmptyLayoutComponent`, `RedirectComponent`, `WeaverletException`,
+`SignalInput`, `SignalOutput`, `SignalTrigger`, `SignalState`,
+`SignalGroup`, `ServersideSignalOutput`, `ComponentsDict`,
+`ComponentsList`, `ComponentsOrderedDict`, `DetatchedComponentRef`,
+`DEFAULT_COMPONENT_NAME`.

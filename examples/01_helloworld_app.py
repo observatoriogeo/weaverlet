@@ -11,4 +11,4 @@ class HelloWorldComponent(WeaverletComponent):
 
 helloworld_component = HelloWorldComponent()
 wapp = WeaverletApp(root_component=helloworld_component)
-wapp.app.run_server(port=8086)
+wapp.app.run(port=8086)

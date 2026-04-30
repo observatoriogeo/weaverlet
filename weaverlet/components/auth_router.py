@@ -1,10 +1,14 @@
-# pyright: reportMissingImports=false, reportMissingModuleSource=false
-
 from flask import session
-import dash_html_components as html
-import dash_core_components as dcc
+from dash import html, dcc
 from dash_extensions.enrich import Input, Output, State
-from ..base import RouterComponent, ComponentsDict, Identifier, ComponentsDict, WeaverletException, DEFAULT_COMPONENT_NAME
+from ..base import (
+    DEFAULT_COMPONENT_NAME,
+    ComponentsDict,
+    Identifier,
+    RouterComponent,
+    WeaverletException,
+    _call_with_router_kwargs,
+)
 from ..logger import logger
 
 
@@ -59,22 +63,34 @@ class AuthRouterComponent(RouterComponent):
                 if pathname == f'{prefix}{route}':
                     logger.info(
                         f'[AuthRouterComponent.register_callbacks.route] route {route} matched')
-                    if(self.routes[route]['login_required']):
+                    if self.routes[route]['login_required']:
                         logger.info(
                             f'[AuthRouterComponent.register_callbacks.route] route {route} requires login')
                         if self.user_session_key in session:
                             logger.info(
                                 f'[AuthRouterComponent.register_callbacks.route] user key found in session, rendering layout of {self.routes[route]["component"]}')
                             user = session[self.user_session_key]
-                            return self.routes[route]['component'](pathname, hash, href, search, user)
+                            return _call_with_router_kwargs(
+                                self.routes[route]['component'],
+                                pathname=pathname, hash=hash, href=href, search=search, user=user,
+                            )
                         else:
                             logger.info(
                                 f'[AuthRouterComponent.register_callbacks.route] user key not found in session, rendering layout of {self.routes[self.login_route]["component"]}')
-                            return self.routes[self.login_route]['component'](pathname, hash, href, search, f'{prefix}{route}')
+                            return _call_with_router_kwargs(
+                                self.routes[self.login_route]['component'],
+                                pathname=pathname, hash=hash, href=href, search=search,
+                                protected_route=f'{prefix}{route}',
+                            )
                     else:
-                        return self.routes[route]['component'](pathname, hash, href, search)
+                        return _call_with_router_kwargs(
+                            self.routes[route]['component'],
+                            pathname=pathname, hash=hash, href=href, search=search,
+                        )
 
             # user tried to reach a different page
             logger.info(
-                f'[AuthRouterComponent.register_callbacks.route] route not found')
-            return self.not_found_page_component(pathname=pathname)
+                '[AuthRouterComponent.register_callbacks.route] route not found')
+            return _call_with_router_kwargs(
+                self.not_found_page_component, pathname=pathname,
+            )

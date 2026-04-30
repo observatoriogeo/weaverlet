@@ -29,5 +29,5 @@ class EchoComponent(WeaverletComponent):
 
 greeting_component = EchoComponent()
 wapp = WeaverletApp(root_component=greeting_component)
-wapp.app.run_server(port=8089)
+wapp.app.run(port=8089)
  

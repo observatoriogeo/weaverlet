@@ -64,4 +64,4 @@ class SignalChainComponent(WeaverletComponent):
 signal_trigger_component = SignalChainComponent()
 
 wapp = WeaverletApp(root_component=signal_trigger_component)
-wapp.app.run_server(port=8089)
+wapp.app.run(port=8089)

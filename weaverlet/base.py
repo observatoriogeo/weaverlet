@@ -1,304 +1,283 @@
-from abc import ABC, abstractmethod
-import string
-import random
-from collections import OrderedDict
-from .logger import logger
-from dash_extensions.enrich import Input, Output, Trigger, State, ServersideOutput
-from dash_extensions.enrich import Dash
-from jupyter_dash import JupyterDash
+from __future__ import annotations
 
+import inspect
+import os
+import sys
+from abc import ABC, abstractmethod
+from collections import OrderedDict
+from typing import Any
+
+from dash_extensions.enrich import (
+    DashProxy,
+    Input,
+    Output,
+    Serverside,
+    State,
+    Trigger,
+)
+
+from .logger import logger
+
+DEFAULT_COMPONENT_NAME = "unnamed"
 COMPONENT_IDS_LENGTH = 7
-DEFAULT_COMPONENT_NAME = 'unnamed'
 
 
 def SignalInput(signal):
     return Input(signal.signal_id, signal.signal_attr)
 
+
 def SignalOutput(signal):
     return Output(signal.signal_id, signal.signal_attr)
 
+
 def ServersideSignalOutput(signal):
-    return ServersideOutput(signal.signal_id, signal.signal_attr)
+    # In dash-extensions 2.x, Serverside is applied to the return value
+    # of the callback (Serverside(value)), not to the Output declaration.
+    # Kept for backwards-compat with code that expected a special Output;
+    # callers should now wrap the returned data with Serverside(...).
+    return Output(signal.signal_id, signal.signal_attr)
+
 
 def SignalTrigger(signal):
     return Trigger(signal.signal_id, signal.signal_attr)
 
+
 def SignalState(signal):
     return State(signal.signal_id, signal.signal_attr)
 
+
 def SignalGroup(signal):
     return signal.signal_group_id
-
 
 
 class WeaverletException(Exception):
     pass
 
 
-class DetatchedComponentRef(object):
-    '''
-    Wrapper class to make a references to a component without including it in the Weaverlet Component Tree (WCT).
-    Useful for preventing component loops in the WCT.
-    '''
-    def __init__(self, component):
-        self.component = component    
-    def __getattr__(self,attr):
-        return getattr(self.component, attr)
+class Identifier:
+    """Descriptor that yields a Dash-unique id per (instance, attribute).
 
-
-class WeaverletComponent(ABC):
-
-    def __init__(self, name=DEFAULT_COMPONENT_NAME):        
-        self._hex_id = self._get_random_hex_string(length=COMPONENT_IDS_LENGTH)
-        self._name = name
-        self._set_id(self._hex_id, self._name)
-        self._context = {}
-
-    def initialize(self):
-        pass
-
-    def register_callbacks(self, app):
-        pass
-        
-    def get_children(self):
-        return self._children
-
-    def get_page_root(self):
-        return self._page_root
-
-    def get_parent(self):
-        return self._parent
-
-    def _set_id(self, hex_id, name):
-        self._id = hex_id + '-' + name
-
-    def get_id(self):
-        return self._id
-
-    def get_name(self):
-        return self._name
-
-    def set_name(self, name):
-        self._name = name
-        self._set_id(self._hex_id, self._name)
-
-    def get_context(self):
-        return self._context
-
-    @abstractmethod
-    def get_layout(self):
-        pass 
-
-    def __call__(self, *args, **kwargs):
-        """
-        logger.debug(
-            f'[{type(self).__name__}.__call__] page root = {self.get_page_root()}')
-        logger.debug(
-            f'[{type(self).__name__}.__call__] parent = {self.get_parent()}')
-        logger.debug(
-            f'[{type(self).__name__}.__call__] self = {self}')
-        """
-        return self.get_layout(*args, **kwargs)
-
-    @staticmethod
-    def _get_random_hex_string(length):
-        return ''.join(random.choice(string.hexdigits.lower()) for _ in range(length))
-
-    def __str__(self):
-        address = hex(id(self))
-        return f'<{self.get_id()} of {type(self).__name__} at {address}>'
-
-
-class RouterComponent(WeaverletComponent):
-    """
-    just a label class.
+    The id is computed lazily on first access and cached on the instance,
+    so it does not depend on any specific `__init__` ordering.
     """
 
-    def __init__(self):
-        super().__init__()
-
-
-class Identifier():
-
-    def __set_name__(self, owner, name):
+    def __set_name__(self, owner: type, name: str) -> None:
         self.name = name
 
     def __get__(self, instance, owner):
-        if not '_id' in instance.__dict__:
-            raise TypeError(
-                'Component instance is missing the "_id" instance attribute.')
-        return instance._id + '-' + self.name
+        if instance is None:
+            return self
+        cache = instance.__dict__.setdefault("_wlt_ids", {})
+        if self.name not in cache:
+            cache[self.name] = (
+                f"{instance.__class__.__name__}_{self.name}_{id(instance):x}"
+            )
+        return cache[self.name]
 
     def __set__(self, instance, value):
-        raise TypeError(
-            'Cannot manually assign a value to an Identifier.')
+        raise TypeError("Cannot manually assign a value to an Identifier.")
+
+
+class WeaverletComponent(ABC):
+    """Base component — encapsulates layout, callbacks, IDs, shared context."""
+
+    def __init__(self, name: str = DEFAULT_COMPONENT_NAME) -> None:
+        self.__dict__.setdefault("_wlt_ids", {})
+        self._wlt_name = name
+        self._wlt_parent: "WeaverletComponent | None" = None
+        self._wlt_context: dict[str, Any] = {}
+
+    # -- Lifecycle hooks -------------------------------------------------
+    def initialize(self) -> None:
+        pass
+
+    def register_callbacks(self, app) -> None:
+        pass
+
+    # -- Identity / hierarchy --------------------------------------------
+    def get_name(self) -> str:
+        return self._wlt_name
+
+    def set_name(self, name: str) -> None:
+        self._wlt_name = name
+
+    def get_parent(self) -> "WeaverletComponent | None":
+        return self._wlt_parent
+
+    def get_context(self) -> dict[str, Any]:
+        return self._wlt_context
+
+    def get_children(self) -> list["WeaverletComponent"]:
+        children: list[WeaverletComponent] = []
+        for v in self.__dict__.values():
+            if isinstance(v, WeaverletComponent):
+                children.append(v)
+            elif isinstance(v, (ComponentsList, ComponentsDict, ComponentsOrderedDict)):
+                children.extend(v.get_components())
+        return children
+
+    def get_id(self) -> str:
+        return f"{self.__class__.__name__}_{id(self):x}"
+
+    # -- Contract --------------------------------------------------------
+    @abstractmethod
+    def get_layout(self, *args, **kwargs):
+        ...
+
+    def __call__(self, *args, **kwargs):
+        return self.get_layout(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"<{self.get_id()} of {type(self).__name__} at {hex(id(self))}>"
+
+    # -- DAG walker ------------------------------------------------------
+    def _wlt_walk(self):
+        visited = {id(self)}
+        stack = [self]
+        while stack:
+            comp = stack.pop()
+            yield comp
+            for child in comp.get_children():
+                if id(child) in visited:
+                    continue
+                visited.add(id(child))
+                child._wlt_parent = comp
+                stack.append(child)
+
+
+class RouterComponent(WeaverletComponent):
+    """Marker class — subclasses of this are routers (used by isinstance checks)."""
+
+    def __init__(self, name: str = DEFAULT_COMPONENT_NAME) -> None:
+        super().__init__(name)
+
+
+class DetachedComponentRef:
+    """Wrap a component so it is NOT discovered as a child by the DAG walker.
+
+    Useful when component A needs a reference to component B that is already
+    attached elsewhere in the tree, to avoid cycles.
+    """
+
+    def __init__(self, component: WeaverletComponent) -> None:
+        self.component = component
+
+    def __getattr__(self, attr):
+        return getattr(self.component, attr)
+
+
+# Backwards-compat alias for the original (typo'd) name.
+DetatchedComponentRef = DetachedComponentRef
 
 
 class ComponentsDict(dict, ABC):
     @abstractmethod
-    def get_components():
-        pass
+    def get_components(self):
+        ...
 
 
 class ComponentsList(list, ABC):
     @abstractmethod
-    def get_components():
-        pass
+    def get_components(self):
+        ...
 
 
 class ComponentsOrderedDict(OrderedDict, ABC):
     @abstractmethod
-    def get_components():
-        pass
+    def get_components(self):
+        ...
 
-class WeaverletApp():
 
-    def __init__(self, root_component, context={}, prevent_initial_callbacks=True, suppress_callback_exceptions=True, jupyter_mode=False, **kwargs):
+def _call_with_router_kwargs(comp: WeaverletComponent, **router_kwargs):
+    """Call comp.get_layout passing only the router kwargs it declares."""
+    sig = inspect.signature(comp.get_layout)
+    accepted = {k: v for k, v in router_kwargs.items() if k in sig.parameters}
+    return comp.get_layout(**accepted)
+
+
+def _safe_get_layout(comp: WeaverletComponent):
+    """Call comp.get_layout, providing sensible placeholders for any
+    router-style kwargs the signature declares without defaults."""
+    sig = inspect.signature(comp.get_layout)
+    kwargs: dict[str, Any] = {}
+    for name, param in sig.parameters.items():
+        if name == "self":
+            continue
+        if param.default is not inspect.Parameter.empty:
+            continue
+        if name == "pathname":
+            kwargs[name] = "/"
+        elif name in ("hash", "href", "search", "protected_route"):
+            kwargs[name] = ""
+        elif name == "user":
+            kwargs[name] = None
+    return comp.get_layout(**kwargs)
+
+
+class WeaverletApp:
+    """Orchestrator — receives the root component, propagates context,
+    registers callbacks, and produces a Dash app."""
+
+    def __init__(
+        self,
+        root_component: WeaverletComponent,
+        context: dict | None = None,
+        title: str | None = None,
+        external_stylesheets: list | None = None,
+        suppress_callback_exceptions: bool = True,
+        prevent_initial_callbacks: bool = True,
+        assets_folder: str | None = None,
+        jupyter_mode: bool = False,
+        **dash_kwargs,
+    ) -> None:
         self.root_component = root_component
-                
+        self.root = root_component  # alias
+        self.context = context if context is not None else {}
+
+        if assets_folder is None:
+            main_module = sys.modules.get("__main__")
+            if main_module is not None and hasattr(main_module, "__file__"):
+                assets_folder = os.path.join(
+                    os.path.dirname(os.path.abspath(main_module.__file__)),
+                    "assets",
+                )
+            else:
+                assets_folder = os.path.abspath("assets")
+
+        kwargs: dict[str, Any] = {
+            "suppress_callback_exceptions": suppress_callback_exceptions,
+            "prevent_initial_callbacks": prevent_initial_callbacks,
+            "assets_folder": assets_folder,
+        }
+        if title is not None:
+            kwargs["title"] = title
+        if external_stylesheets is not None:
+            kwargs["external_stylesheets"] = external_stylesheets
+        kwargs.update(dash_kwargs)
+
         if jupyter_mode:
-            self.app = JupyterDash(**kwargs)
+            try:
+                from jupyter_dash import JupyterDash
+            except ImportError as exc:
+                raise ImportError(
+                    "jupyter_mode=True requires the 'jupyter' extra. "
+                    "Install with `pip install weaverlet[jupyter]`."
+                ) from exc
+            self.app = JupyterDash(__name__, **kwargs)
         else:
-            self.app = Dash(**kwargs)        
-        
-        self.context = context        
-                
-        # configure Dash app
-        self.app.config.prevent_initial_callbacks = prevent_initial_callbacks
-        self.app.config.suppress_callback_exceptions = suppress_callback_exceptions
+            self.app = DashProxy(__name__, **kwargs)
 
-        # set the children of each component in the component tree
-        logger.info(
-            '[WeaverletApp.__init__] finding children in components ...')
-        self._find_children_recursive(component=self.root_component, level=0)
+        # Walk the tree once: propagate context and run initialize().
+        logger.info("[WeaverletApp.__init__] propagating context and initializing components ...")
+        for comp in self.root_component._wlt_walk():
+            comp._wlt_context = self.context
+            comp.initialize()
 
-        # set the page root of each component in the component tree
-        logger.info(
-            '[WeaverletApp.__init__] setting page roots in components ...')
-        self.root_component._page_root = None
-        if isinstance(self.root_component, RouterComponent):
-            # each child here (including not_found_component and the login component if present) is a different page root
-            for child in self.root_component.get_children():
-                child._page_root = None
-                logger.info(
-                    f'[WeaverletApp.__init__] setting page root = {child} in components ...')
-                for grand_child in child.get_children():
-                    self._set_page_root_recursive(
-                        component=grand_child, page_root=child, level=0)
-        else:
-            for child in self.root_component.get_children():
-                self._set_page_root_recursive(
-                    component=child, page_root=self.root_component, level=0)
+        # Set the layout (with permissive placeholder injection for the root).
+        logger.info("[WeaverletApp.__init__] setting Dash app layout ...")
+        self.app.layout = _safe_get_layout(self.root_component)
 
-        # set the parent of each component in the component tree
-        logger.info(
-            '[WeaverletApp.__init__] setting the parents in components ...')
-        self.root_component._parent = None
-        if isinstance(self.root_component, RouterComponent):
-            for child in self.root_component.get_children():
-                child._parent = None
-                logger.info(
-                    f'[WeaverletApp.__init__] setting parent = {child} in children components ...')
-                for grand_child in child.get_children():
-                    self._set_parent_recursive(
-                        component=grand_child, parent=child, level=0)
-        else:
-            for child in self.root_component.get_children():
-                self._set_parent_recursive(
-                    component=child, parent=self.root_component, level=0)
-
-        # set the context of each component in the component tree
-        logger.info(
-            '[WeaverletApp.__init__] setting the context in components ...')        
-        self._set_context_recursive(component=self.root_component, context=self.context, level=0)
-
-        # run initialize() for all componentes
-        logger.info(
-            '[WeaverletApp.__init__] running initialize() in components ...')        
-        self._run_initialize_recursive(component=self.root_component, level=0)
-
-        # set the Dash app layout
-        logger.info(
-            '[WeaverletApp.__init__] setting Dash app layout ...')        
-        self.app.layout = self.root_component()
-        #app.validation_layout = self.root_component()
-
-        # run the register_callback method of each component in the component tree
-        logger.info(
-            '[WeaverletApp.__init__] registering callbacks in components ...')
-        self._register_callbacks_recursive(
-            self.app, component=self.root_component, level=0)
-
-    @staticmethod
-    def _find_children(component):
-        children = []
-        for attr_name in dir(component):
-            attr = getattr(component, attr_name)
-            if isinstance(attr, ComponentsList):
-                children += attr.get_components()
-            elif isinstance(attr, ComponentsDict):
-                children += attr.get_components()
-            elif isinstance(attr, ComponentsOrderedDict):
-                children += attr.get_components()
-            elif isinstance(attr, WeaverletComponent):
-                children.append(attr)
-            
-        return children
-
-    def _find_children_recursive(self, component, level):
-        log_string = '[WeaverletApp._find_children_recursive] ' + \
-            '\t'*level + f'Setting children for {component}'
-        logger.info(log_string)
-
-        component._children = self._find_children(component)
-        for child in component.get_children():
-            self._find_children_recursive(child, level+1)
-
-    def _set_page_root_recursive(self, component, page_root, level):
-        log_string = '[WeaverletApp._set_page_root_recursive] ' + \
-            '\t'*level + f'Setting page root for {component}'
-        logger.info(log_string)
-
-        component._page_root = page_root
-        for child in component.get_children():
-            self._set_page_root_recursive(child, page_root, level+1)
-
-    def _set_parent_recursive(self, component, parent, level):
-        log_string = '[WeaverletApp._set_parent_recursive] ' + \
-            '\t'*level + f'Setting the parent for {component}'
-        logger.info(log_string)
-
-        component._parent = parent
-        for child in component.get_children():
-            self._set_parent_recursive(child, component, level+1)
-
-    def _register_callbacks_recursive(self, app, component, level):
-
-        log_string = '[WeaverletApp._register_callbacks_recursive] ' + \
-            '\t'*level + f'Registering callbacks for {component}'
-        logger.info(log_string)
-
-        component.register_callbacks(app)
-        for child in component.get_children():
-            self._register_callbacks_recursive(app, child, level+1)
-
-    def _set_context_recursive(self, component, context, level):
-
-        log_string = '[WeaverletApp._set_context_recursive] ' + \
-            '\t'*level + f'Setting context for {component}'
-        logger.info(log_string)
-
-        component._context = context
-        for child in component.get_children():
-            self._set_context_recursive(child, context, level+1)
-
-    def _run_initialize_recursive(self, component, level):
-
-        log_string = '[WeaverletApp._run_initialize_recursive] ' + \
-            '\t'*level + f'Running initialize() for {component}'
-        logger.info(log_string)
-        
-        component.initialize()
-
-        for child in component.get_children():
-            self._run_initialize_recursive(child, level+1)
+        # Register callbacks.
+        logger.info("[WeaverletApp.__init__] registering callbacks in components ...")
+        for comp in self.root_component._wlt_walk():
+            comp.register_callbacks(self.app)

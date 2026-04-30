@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "weaverlet"
+version = "0.3.0"
+description = "Slim, server-side, component-driven framework on top of Plotly Dash."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [
+    { name = "Alberto Garcia-Robledo", email = "alberto.garob@gmail.com" },
+]
+keywords = ["dash", "plotly", "components", "dashboard", "framework"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+dependencies = [
+    "dash>=4.1.0,<5.0.0",
+    "dash-extensions>=1.0.0,<3.0.0",
+]
+
+[project.optional-dependencies]
+jupyter = ["dash[jupyter]>=4.1"]
+examples = ["dash-bootstrap-components>=1.0"]
+dev = [
+    "pytest>=8",
+    "pytest-playwright>=0.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/observatoriogeo/weaverlet"
+Issues = "https://github.com/observatoriogeo/weaverlet/issues"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "weaverlet",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["weaverlet"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+filterwarnings = [
+    # dash-extensions emits a DeprecationWarning about pkg_resources on import
+    "ignore::DeprecationWarning:dash_extensions",
+    "ignore::DeprecationWarning:pkg_resources",
+]

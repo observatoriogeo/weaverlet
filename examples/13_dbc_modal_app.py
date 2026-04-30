@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import dash_html_components as html
-import dash_core_components as dcc
+from dash import html, dcc
 import dash_bootstrap_components as dbc
 from dash_extensions.enrich import Output, Trigger
 from weaverlet.base import WeaverletApp, WeaverletComponent, Identifier, SignalTrigger, SignalOutput
@@ -182,4 +181,4 @@ wapp = WeaverletApp(root_component=router,
                     title='Simple Weaverlet + DBC app',
                     external_stylesheets=[dbc.themes.COSMO])
 
-wapp.app.run_server()
+wapp.app.run()
