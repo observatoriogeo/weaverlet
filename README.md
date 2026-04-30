@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="FullLogo_Transparent_NoBuffer.png" width="375" height="275" title="Logo">
+  <img src="FullLogo_Transparent_NoBuffer.png" width="375" height="275" alt="Weaverlet" title="Weaverlet">
 </p>
-
-<h1 align="center">Weaverlet</h1>
 
 <p align="center">
   <b>Slim, server-side, component-driven framework for Plotly Dash dashboards.</b><br>
@@ -11,7 +9,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/weaverlet/"><img src="https://img.shields.io/pypi/v/weaverlet.svg" alt="PyPI"></a>
-  <a href="https://pypi.org/project/weaverlet/"><img src="https://img.shields.io/pypi/pyversions/weaverlet.svg" alt="Python versions"></a>
+  <a href="https://pypi.org/project/weaverlet/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
 </p>
 
@@ -159,7 +157,7 @@ The [`examples/`](examples) folder has 14 self-contained scripts, ordered by com
 
 ## For LLM coding assistants
 
-Weaverlet ships a [`ReadMe.LLM.md`](ReadMe.LLM.md) following the [ReadMe.LLM methodology](https://arxiv.org/html/2504.09798v3) — rules, context, 14 worked examples, API signatures, and patterns specifically formatted for LLMs like Claude, GPT, and Codex. To use it from another project, drop one of these URLs into your prompt or have your assistant fetch it:
+Weaverlet ships a [`ReadMe.LLM.md`](ReadMe.LLM.md) following the [ReadMe.LLM methodology](https://readmellm.github.io/) — rules, context, 14 worked examples, API signatures, and patterns specifically formatted for LLMs like Claude, GPT, and Codex. To use it from another project, drop one of these URLs into your prompt or have your assistant fetch it:
 
 - **Latest:** [`https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/ReadMe.LLM.md`](https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/ReadMe.LLM.md)
 - **Pinned to v0.3.0:** [`https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@v0.3.0/ReadMe.LLM.md`](https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@v0.3.0/ReadMe.LLM.md)
