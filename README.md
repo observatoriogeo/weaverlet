@@ -126,6 +126,15 @@ wapp.app.run_server()
 
 For more detailed usage, please refer to the examples folder.
 
+## For LLM coding assistants
+
+Weaverlet ships a `ReadMe.LLM.md` (following the [ReadMe.LLM methodology](https://arxiv.org/html/2504.09798v3)) with rules, context, 14 worked examples, API signatures, and patterns specifically formatted for LLMs like GPT, Claude, and Codex. To use it from another project, drop one of these URLs into your prompt or have your assistant fetch them:
+
+- **Latest:** [`https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/ReadMe.LLM.md`](https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/ReadMe.LLM.md)
+- **Pinned to v0.3.0:** [`https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@v0.3.0/ReadMe.LLM.md`](https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@v0.3.0/ReadMe.LLM.md)
+
+There's also an [`llms.txt`](https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/llms.txt) at the repo root following the [llmstxt.org](https://llmstxt.org/) convention — a short index that tools like Cursor and Claude Code can auto-discover.
+
 ## License
 
 Weaverlet is open-source software [licensed under the MIT license](LICENSE).

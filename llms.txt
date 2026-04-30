@@ -1,0 +1,21 @@
+# Weaverlet
+
+> Slim, server-side, component-driven framework on top of Plotly Dash. Build multi-page Dash dashboards in pure Python by composing reusable component classes — no JavaScript, HTML, or CSS templating required.
+
+Weaverlet 0.3.x targets Python ≥ 3.12, Dash ≥ 4.1, and dash-extensions ≥ 1.0. Its hero feature is `SimpleRouterComponent(keep_mounted=True)`, which keeps every route mounted and toggles CSS visibility on navigation — preserving WebGL canvas state (dash-leaflet, dash-sylvereye, Plotly WebGL) and React state (n_clicks, selections) across page changes.
+
+## Docs
+
+- [ReadMe.LLM.md (latest)](https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/ReadMe.LLM.md): Full LLM-oriented framework docs — rules, context, 14 worked examples, API signatures, patterns. Follow [arxiv:2504.09798](https://arxiv.org/html/2504.09798v3) "ReadMe.LLM" methodology.
+- [ReadMe.LLM.md (v0.3.0, pinned)](https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@v0.3.0/ReadMe.LLM.md): Same doc, pinned to the v0.3.0 release for prompts that need stable output.
+- [CHANGELOG.md](https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/CHANGELOG.md): Release notes for v0.3.0 — what's new, what broke, how to migrate from 0.2.
+
+## Source
+
+- [GitHub repository](https://github.com/observatoriogeo/weaverlet)
+- [PyPI package](https://pypi.org/project/weaverlet/)
+
+## Optional
+
+- [Examples folder](https://github.com/observatoriogeo/weaverlet/tree/main/examples): 14 self-contained scripts, numbered by complexity (`01_helloworld_app.py` → `14_dmc_multipage_app.py`). Examples 11–13 use Dash Bootstrap Components; 14 uses Dash Mantine Components with `keep_mounted=True`.
+- [tests/](https://github.com/observatoriogeo/weaverlet/tree/main/tests): 60 pytest tests covering Identifier, the DAG walker, both router modes, AuthRouter, and the public API surface — useful as additional behavioral specifications for code generation.
