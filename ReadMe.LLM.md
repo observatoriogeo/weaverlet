@@ -1344,9 +1344,9 @@ class SimpleRouterComponent(RouterComponent):
 **Notes for LLMs:**
 - `routes` maps paths to component instances.
 - When `use_prefix=True`, `WeaverletApp(context={'prefix': '...'} )` is required.
-- `keep_mounted=True`: every route is rendered at startup; navigation toggles CSS only. Each `routes` entry must be a **distinct component instance**.
-- `preserve_path` (default = first route in `routes`) is the route that uses `visibility:hidden` instead of `display:none` when hidden — required for canvases that can't survive `display:none`.
-- If `not_found_page_component` is the same instance as one of the routes, the router shares that route's wrapper (no `DuplicateIdError`).
+- `keep_mounted=True`: every unique component is rendered once at startup; navigation toggles CSS only. Aliased paths (multiple `routes` keys pointing at the same instance) automatically share one canonical wrapper.
+- `preserve_path` (default = first canonical path in `routes`) is the path whose wrapper uses `visibility:hidden` instead of `display:none` when hidden — required for canvases that can't survive `display:none`. If you pass an aliased path, it normalizes to the canonical.
+- If `not_found_page_component` is the same instance as one of the routes, the router shares that route's wrapper (no separate not-found wrapper is mounted). Otherwise, the not-found wrapper's children are re-rendered on each unmatched-pathname change so a `f"Page {pathname} not found"` template reflects the live URL.
 - Pages may declare any subset of `(pathname, hash, href, search)` in `get_layout(...)`; the router passes only what is declared.
 
 ---

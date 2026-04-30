@@ -172,7 +172,7 @@ router = SimpleRouterComponent(
 WeaverletApp(root_component=router).app.run()
 ```
 
-> ⚠️ When `keep_mounted=True`, every entry in `routes` must map to a *distinct* component instance. Aliasing two paths to the same instance would mount that instance's `Identifier`-bearing layout twice and trigger `DuplicateIdError`. With the default `keep_mounted=False`, aliasing is fine.
+> Aliasing — multiple paths pointing at the same component instance — works in both modes. Under `keep_mounted=True`, aliased paths automatically share a single wrapper, so the same `Identifier`-bearing layout never mounts twice.
 
 ## Examples
 
