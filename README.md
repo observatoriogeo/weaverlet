@@ -3,8 +3,11 @@
 </p>
 
 <p align="center">
-  <b>Slim, server-side, component-driven framework for Plotly Dash dashboards.</b><br>
-  Build multi-page Dash apps in pure Python — no JavaScript, HTML, or CSS templating.
+  <b>OOP for Plotly Dash — make your dashboards composable.</b>
+</p>
+
+<p align="center">
+  Vanilla Dash and Dash Pages give you primitives, not encapsulation: callbacks live globally, IDs are strings you manage by hand, and the same widget can't be dropped into two apps without surgery. Weaverlet packages layout + callbacks + state into reusable Python classes, with auto-unique IDs, typed inter-component signals, and a <code>keep_mounted</code> router that preserves WebGL state across navigation.
 </p>
 
 <p align="center">
@@ -19,18 +22,40 @@ Weaverlet, developed by the [Observatorio Metropolitano CentroGeo](https://obser
 
 It's aimed at:
 
-- **Data scientists** building multi-page visualization dashboards.
-- **Dash developers** who want reusable components instead of monolithic apps.
-- **JavaScript developers** comfortable with React's component model and looking for the same paradigm in Python.
+- **Data scientists** whose dashboard has outgrown a single file and needs structure.
+- **Dash developers** who want true component reuse instead of copy-paste between apps.
+- **React-style developers** looking for the same class-based component paradigm, server-side, in pure Python.
 
-## Key features
+## What Weaverlet adds on top of vanilla Dash
 
-- **Component-based** — every UI block is a class. Layouts compose; callbacks stay local; IDs are unique by descriptor (no string collisions).
-- **Multipage routing** — `SimpleRouterComponent` maps URLs to components; `AuthRouterComponent` adds session-based gating.
-- **WebGL-safe routing** *(new in 0.3)* — `keep_mounted=True` keeps every route in the DOM and toggles CSS instead of unmounting, preserving WebGL canvases (`dash-leaflet`, `dash-sylvereye`, Plotly WebGL) and React state (`n_clicks`, selections, scroll) across navigation.
-- **Inter-component signals** — `SignalComponent` and helpers replace ad-hoc `dcc.Store` + manual callback wiring for cross-component events.
-- **Shared context** — a single dict propagates to every component in the DAG.
-- **Session auth** — `AuthRouterComponent` uses `flask.session` out of the box.
+- **Class-based encapsulation** — layout, callbacks, state, and IDs live together in one class. Instantiate it twice for two independent copies that don't step on each other.
+- **Auto-unique IDs** — the `Identifier()` descriptor generates a Dash-unique ID per instance. No more managing string IDs by hand or hitting `DuplicateIdError` when reusing a widget.
+- **Signal-based events** — `SignalComponent` + `SignalInput`/`SignalOutput`/`SignalTrigger` replace ad-hoc `dcc.Store` + manual callback wiring as the canonical inter-component event bus.
+- **State-preserving routing** *(new in 0.3)* — `SimpleRouterComponent(keep_mounted=True)` keeps every route mounted and toggles CSS, so WebGL canvases (dash-leaflet maps, dash-sylvereye graphs, Plotly WebGL) and React state (`n_clicks`, selections, scroll position) survive navigation.
+- **Session-based auth routing** — `AuthRouterComponent` gates routes via `flask.session` out of the box.
+- **Shared context** — one dict propagates to every component in the DAG; no prop-drilling, no globals.
+
+## Weaverlet vs Dash Pages
+
+[Dash Pages](https://dash.plotly.com/urls) (built into Dash 2.5+) and Weaverlet both solve "multi-page Dash" but at different levels of abstraction. Pages is a *routing convention* — drop a file in `pages/`, register it, get a route. Weaverlet is a *component framework* — write classes, compose them, navigate without losing state.
+
+| Capability | Dash Pages | Weaverlet |
+|---|---|---|
+| Built-in to Dash | ✓ (Dash ≥ 2.5) | One `pip install` |
+| Routing source | Filesystem (`pages/*.py`) | Programmatic `routes` dict, computed at runtime |
+| Path templating (`/users/<id>`) | ✓ | Via `pathname` / `search` parsing |
+| Page-level encapsulation | One module per page | Reusable component classes; same class can power N routes |
+| Cross-page widget reuse | Imports + manual callback wiring | Instantiate the same class anywhere; auto-unique IDs |
+| Inter-component events | `dcc.Store` + global callbacks | `SignalComponent` typed events |
+| **State across navigation** | Unmount + remount on every route change | `keep_mounted=True` preserves React + WebGL state |
+| Auth gating | DIY | `AuthRouterComponent` + Flask sessions |
+| Auto-discovered nav menu | ✓ (`dash.page_registry`) | Build it yourself |
+
+**Reach for Dash Pages when** your dashboard is content-heavy, each page is roughly independent, you want filesystem-driven routing, and you don't need to preserve state across navigation. It's the simpler tool and ships with Dash.
+
+**Reach for Weaverlet when** you have shared widget logic across pages, when WebGL components (maps, network graphs, 3D plots) shouldn't reset on navigation, when you want typed inter-component events instead of `dcc.Store` plumbing, or when your dashboard has grown past the "one file per page" model and needs proper encapsulation.
+
+The two aren't mutually exclusive — Weaverlet apps can coexist alongside a Pages-based site in the same Dash deployment if that fits your migration path.
 
 ## What's new in 0.3.0
 
