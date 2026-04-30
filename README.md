@@ -2,144 +2,176 @@
   <img src="FullLogo_Transparent_NoBuffer.png" width="375" height="275" title="Logo">
 </p>
 
-# Weaverlet
+<h1 align="center">Weaverlet</h1>
 
-Weaverlet is a slim, server-side, component-driven framework developed by the [Observatorio Metropolitano CentroGeo](https://observatoriogeo.mx) designed to simplify the building of multi-page web dashboard applications. Built on top of the [Plotly Dash framework](https://dash.plotly.com/), Weaverlet allows developers to create complex dashboard applications entirely in Python, without the need for JavaScript, HTML, CSS, or templating languages.
+<p align="center">
+  <b>Slim, server-side, component-driven framework for Plotly Dash dashboards.</b><br>
+  Build multi-page Dash apps in pure Python — no JavaScript, HTML, or CSS templating.
+</p>
 
-Weaverlet is designed around the concept of the Weaverlet Component: a class that encapsulates the complexities of layout and callbacks of one or more Dash components, which together perform a single high-level user interface function, presenting them as a self-contained, composable, and reusable UI component.
+<p align="center">
+  <a href="https://pypi.org/project/weaverlet/"><img src="https://img.shields.io/pypi/v/weaverlet.svg" alt="PyPI"></a>
+  <a href="https://pypi.org/project/weaverlet/"><img src="https://img.shields.io/pypi/pyversions/weaverlet.svg" alt="Python versions"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
+</p>
 
-A complete visualization application can be "composed" from nested Weaverlet Components that together create a component hierarchy. It is possible to leverage any existing Dash component to build new Weaverlet Components. 
+---
 
-Moreover, Weaverlet Components can communicate with other components within the hierarchy through signals and share a context to store and convey data.
+Weaverlet, developed by the [Observatorio Metropolitano CentroGeo](https://observatoriogeo.mx), turns a [Plotly Dash](https://dash.plotly.com/) app into a hierarchy of reusable Python classes. Each `WeaverletComponent` owns its own layout, callbacks, and identifiers; you compose them into a tree, hand the root to `WeaverletApp`, and ship.
 
-Weaverlet is specifically designed to cater to the following user groups:
+It's aimed at:
 
-* Data scientists seeking to build comprehensive data visualization applications consisting of multiple dashboards.
-* Python developers proficient in Dash, aiming to develop data visualization applications using components that can be seamlessly reused across different applications.
-* JavaScript developers accustomed to the component-based programming approach employed by popular frameworks such as React.
+- **Data scientists** building multi-page visualization dashboards.
+- **Dash developers** who want reusable components instead of monolithic apps.
+- **JavaScript developers** comfortable with React's component model and looking for the same paradigm in Python.
 
-## Key Features
+## Key features
 
-- **Multi-Page Support**: Seamlessly manage multi-page Dash web applications.
-- **Component-Based Design**: Utilize Weaverlet Components, which follow a component-based paradigm similar to popular front-end frameworks, but are entirely managed through a Python OOP interface.
-- **Inter-Component Communication**: Components can communicate with parent, child, and root components within the application.
-- **Session-Based Authentication**: Implement session-based authentication to manage user sessions within your dashboard applications.
-- **Shared Context**: Maintain a shared context across all components in the Weaverlet Component Directed Acyclic Graph (DAG), enhancing consistency and manageability.
+- **Component-based** — every UI block is a class. Layouts compose; callbacks stay local; IDs are unique by descriptor (no string collisions).
+- **Multipage routing** — `SimpleRouterComponent` maps URLs to components; `AuthRouterComponent` adds session-based gating.
+- **WebGL-safe routing** *(new in 0.3)* — `keep_mounted=True` keeps every route in the DOM and toggles CSS instead of unmounting, preserving WebGL canvases (`dash-leaflet`, `dash-sylvereye`, Plotly WebGL) and React state (`n_clicks`, selections, scroll) across navigation.
+- **Inter-component signals** — `SignalComponent` and helpers replace ad-hoc `dcc.Store` + manual callback wiring for cross-component events.
+- **Shared context** — a single dict propagates to every component in the DAG.
+- **Session auth** — `AuthRouterComponent` uses `flask.session` out of the box.
 
-## Getting Started
+## What's new in 0.3.0
 
-To get started with Weaverlet, you can install the package using pip:
+Released April 2026 — full notes in [CHANGELOG.md](CHANGELOG.md).
+
+- **Dash 4.x** support; Python ≥ 3.12; dependency pins relaxed (Flask / werkzeug now resolved transitively, no longer hard-pinned).
+- **`SimpleRouterComponent(keep_mounted=True, preserve_path="/...")`** for state preservation across route changes.
+- **Top-level imports** — `from weaverlet import WeaverletComponent, ...` works directly; no need to drill into `weaverlet.base` / `weaverlet.components`.
+- **Permissive `get_layout` signatures** — components declare any subset of `(pathname, hash, href, search, user, protected_route)` and the router passes only what's declared.
+- **`DashProxy` under the hood** so `dash_extensions.javascript.assign()`, `Serverside(...)` return wrappers, and `group=` multi-output callbacks all work without extra wiring.
+- **`assets_folder` auto-resolves** to the user's main script directory — no manual asset path setup needed.
+- **60-test pytest suite**; build via `pyproject.toml` + hatchling.
+- **`jupyter-dash`** moved to an optional extra (`pip install weaverlet[jupyter]`).
+
+## Install
 
 ```bash
 pip install weaverlet
 ```
 
-Here's a simple example demonstrating how to encapsulate a basic Dash dashboard within a Weaverlet component:
+(or `uv add weaverlet` if you're on uv.)
+
+Optional extras:
+
+| Extra | Pulls in | Use when |
+|---|---|---|
+| `weaverlet[examples]` | `dash-bootstrap-components`, `dash-mantine-components` | Running the bundled examples 11–14 |
+| `weaverlet[jupyter]` | `dash[jupyter]` | Constructing `WeaverletApp(jupyter_mode=True)` |
+| `weaverlet[dev]` | `pytest`, `pytest-playwright` | Hacking on Weaverlet itself |
+
+## Quick start
+
+A single-page app that echoes user input:
 
 ```python
-from weaverlet.base import WeaverletComponent, WeaverletApp, Identifier
-from dash.dependencies import Input, Output
+from weaverlet import WeaverletComponent, WeaverletApp, Identifier
+from dash_extensions.enrich import Input, Output
 from dash import html, dcc
 
 
 class EchoComponent(WeaverletComponent):
-
-    text_input_id = Identifier()    
+    text_input_id = Identifier()
     echo_div_id = Identifier()
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
 
     def get_layout(self):
         return html.Div([
-            dcc.Input(id=self.text_input_id,
-                      type='text'),
-            html.Div(id=self.echo_div_id)
+            dcc.Input(id=self.text_input_id, type="text"),
+            html.Div(id=self.echo_div_id),
         ])
 
     def register_callbacks(self, app):
-        @app.callback(
-            Output(self.echo_div_id, 'children'),
-            Input(self.text_input_id, 'value')
-        )
-        def update_echo_div(text_value):
-            return f'{text_value}'
+        @app.callback(Output(self.echo_div_id, "children"),
+                      Input(self.text_input_id, "value"))
+        def echo(text_value):
+            return text_value or ""
 
 
-greeting_component = EchoComponent()
-wapp = WeaverletApp(root_component=greeting_component)
-wapp.app.run_server()
+WeaverletApp(root_component=EchoComponent()).app.run()
 ```
 
-Here’s a simple example to show how to set up a basic Weaverlet application made of two dashboards (pages):
+A multipage app with WebGL-safe state preservation:
 
 ```python
-from weaverlet.base import WeaverletComponent, WeaverletApp
-from weaverlet.components import SimpleRouterComponent
+from weaverlet import (
+    WeaverletComponent, WeaverletApp, SimpleRouterComponent,
+)
 from dash import html
 
 
-class PageAComponent(WeaverletComponent):
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def get_layout(self, pathname, hash, href, search):
-        return html.Div(f'hello from Page A!')
+class HomePage(WeaverletComponent):
+    def get_layout(self):
+        return html.Div("Home — your dash-leaflet map goes here.")
 
 
-class PageBComponent(WeaverletComponent):
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def get_layout(self, pathname, hash, href, search):
-        return html.Div(f'hello from Page B!')
+class AboutPage(WeaverletComponent):
+    def get_layout(self):
+        return html.Div("About — switch back to Home; the map's zoom survives.")
 
 
-class PageNotFoundComponent(WeaverletComponent):
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def get_layout(self, pathname):
-        return html.Div(f'Page not found!')
+class NotFound(WeaverletComponent):
+    def get_layout(self):
+        return html.Div("404")
 
 
-page_a_component = PageAComponent()
-page_b_component = PageBComponent()
-not_found_page_component = PageNotFoundComponent()
-
-routes = {
-    '/': page_a_component,
-    '/page_a': page_a_component,
-    '/page_b': page_b_component
-}
-router_component = SimpleRouterComponent(
-    routes=routes,
-    not_found_page_component=not_found_page_component
+router = SimpleRouterComponent(
+    routes={"/": HomePage(), "/about": AboutPage()},
+    not_found_page_component=NotFound(),
+    keep_mounted=True,        # keep all routes mounted; toggle CSS only
+    preserve_path="/",        # which route owns the document flow (default: first)
 )
-
-wapp = WeaverletApp(root_component=router_component)
-wapp.app.run_server()
+WeaverletApp(root_component=router).app.run()
 ```
 
-For more detailed usage, please refer to the examples folder.
+> ⚠️ When `keep_mounted=True`, every entry in `routes` must map to a *distinct* component instance. Aliasing two paths to the same instance would mount that instance's `Identifier`-bearing layout twice and trigger `DuplicateIdError`. With the default `keep_mounted=False`, aliasing is fine.
+
+## Examples
+
+The [`examples/`](examples) folder has 14 self-contained scripts, ordered by complexity:
+
+| # | File | Demonstrates |
+|--:|---|---|
+| 01 | [`01_helloworld_app.py`](examples/01_helloworld_app.py) | Minimal layout-only component |
+| 02 | [`02_echo_app.py`](examples/02_echo_app.py) | Layout + callbacks + `Identifier` |
+| 03 | [`03_greeting_app.py`](examples/03_greeting_app.py) | Constructor-injected state |
+| 04 | [`04_router_app.py`](examples/04_router_app.py) | Multipage with `SimpleRouterComponent` |
+| 05 | [`05_auth_router_app.py`](examples/05_auth_router_app.py) | Session-protected routes via `AuthRouterComponent` |
+| 06 | [`06_redirect_app.py`](examples/06_redirect_app.py) | Programmatic redirect from a callback |
+| 07 | [`07_signal_input.py`](examples/07_signal_input.py) | Signals carrying a payload |
+| 08 | [`08_signal_trigger.py`](examples/08_signal_trigger.py) | Edge-only triggers |
+| 09 | [`09_signal_chain_app.py`](examples/09_signal_chain_app.py) | Chained signal pipeline |
+| 10 | [`10_div_signal_trigger_app.py`](examples/10_div_signal_trigger_app.py) | Signal-driven `<div>` updates |
+| 11 | [`11_dbc_app.py`](examples/11_dbc_app.py) | Single-page Weaverlet + Dash Bootstrap |
+| 12 | [`12_dbc_multipage_app.py`](examples/12_dbc_multipage_app.py) | Multipage with DBC navbar |
+| 13 | [`13_dbc_modal_app.py`](examples/13_dbc_modal_app.py) | DBC modal triggered by signals |
+| 14 | [`14_dmc_multipage_app.py`](examples/14_dmc_multipage_app.py) | Dash Mantine + AppShell + `keep_mounted` state preservation |
+
+## Compatibility
+
+| | |
+|---|---|
+| Python | ≥ 3.12 |
+| Dash | ≥ 4.1.0, < 5.0.0 |
+| dash-extensions | ≥ 1.0.0, < 3.0.0 (1.x and 2.x both supported) |
 
 ## For LLM coding assistants
 
-Weaverlet ships a `ReadMe.LLM.md` (following the [ReadMe.LLM methodology](https://arxiv.org/html/2504.09798v3)) with rules, context, 14 worked examples, API signatures, and patterns specifically formatted for LLMs like GPT, Claude, and Codex. To use it from another project, drop one of these URLs into your prompt or have your assistant fetch them:
+Weaverlet ships a [`ReadMe.LLM.md`](ReadMe.LLM.md) following the [ReadMe.LLM methodology](https://arxiv.org/html/2504.09798v3) — rules, context, 14 worked examples, API signatures, and patterns specifically formatted for LLMs like Claude, GPT, and Codex. To use it from another project, drop one of these URLs into your prompt or have your assistant fetch it:
 
 - **Latest:** [`https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/ReadMe.LLM.md`](https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/ReadMe.LLM.md)
 - **Pinned to v0.3.0:** [`https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@v0.3.0/ReadMe.LLM.md`](https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@v0.3.0/ReadMe.LLM.md)
 
-There's also an [`llms.txt`](https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/llms.txt) at the repo root following the [llmstxt.org](https://llmstxt.org/) convention — a short index that tools like Cursor and Claude Code can auto-discover.
+There's also an [`llms.txt`](llms.txt) at the repo root following the [llmstxt.org](https://llmstxt.org/) convention — a short index that tools like Cursor and Claude Code can auto-discover.
+
+## Contributing & support
+
+- Bug reports and feature requests: [GitHub issues](https://github.com/observatoriogeo/weaverlet/issues).
+- Tests: `pip install -e ".[dev]"` then `pytest` (60 tests, ~1 second).
+- Migrating from 0.2.x? See [CHANGELOG.md](CHANGELOG.md) — most code keeps working unchanged; the main gotcha is `app.run_server()` → `app.run()` (Dash 4 removed the old name).
 
 ## License
 
 Weaverlet is open-source software [licensed under the MIT license](LICENSE).
-
-## Support
-
-If you have any questions or issues, please open an issue on the GitHub repository or contact us.
-
