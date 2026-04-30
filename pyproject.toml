@@ -29,7 +29,10 @@ dependencies = [
 
 [project.optional-dependencies]
 jupyter = ["dash[jupyter]>=4.1"]
-examples = ["dash-bootstrap-components>=1.0"]
+examples = [
+    "dash-bootstrap-components>=2.0,<3.0",
+    "dash-mantine-components>=2.0,<3.0",
+]
 dev = [
     "pytest>=8",
     "pytest-playwright>=0.5",
