@@ -57,6 +57,29 @@ It's aimed at:
 
 The two aren't mutually exclusive — Weaverlet apps can coexist alongside a Pages-based site in the same Dash deployment if that fits your migration path.
 
+## Weaverlet vs Dash All-in-One Components
+
+[All-in-One Components](https://dash.plotly.com/all-in-one-components) (AIO, built into Dash 2+) and Weaverlet share a goal — bundle a Dash widget's layout and callbacks into one unit — but they operate at different scopes. AIO is a *widget pattern*: subclass `html.Div`, register pattern-matching callbacks once at module level, give each instance a UUID `aio_id`. Weaverlet is a *whole-app framework*: a tree of components with lifecycle hooks, routing, signals, and shared context.
+
+| Capability | Dash AIO | Weaverlet |
+|---|---|---|
+| Built-in to Dash | ✓ (Dash ≥ 2.0) | One `pip install` |
+| ID style | Pattern-matching dicts (`{'component': ..., 'aio_id': uuid}`) | Flat strings via `Identifier()` descriptor |
+| Callback registration | Once at module level via `MATCH` / `ALL` | Per instance, in `register_callbacks(self, app)` |
+| Instance state on `self` | Awkward (callbacks are module-level free functions) | Native (callbacks close over `self`) |
+| Composing hierarchies | Limited — each AIO is typically a leaf | DAG of nested components; parent/child wiring is automatic |
+| Multipage routing | Not provided (pair with Dash Pages or DIY) | `SimpleRouterComponent` + `AuthRouterComponent` |
+| Inter-component events | Pattern-matching callbacks or DIY `dcc.Store` | Typed `SignalComponent` events |
+| State across navigation | Up to surrounding router (none by default) | `keep_mounted=True` preserves React + WebGL state |
+| Shared context / config | DIY | Built-in dict propagated to every component |
+| Auth gating | DIY | `AuthRouterComponent` + Flask sessions |
+
+**Reach for AIO when** you're building a single reusable widget — a fancy date picker, a search box, a chart-with-controls — to drop into existing Dash apps, especially when you want many instances and need to operate on all of them at once via pattern-matching. It's the lighter pattern for *one widget*.
+
+**Reach for Weaverlet when** you're structuring a full application — multipage, auth, signal flows, shared context, state-preserving navigation. It's the framework for *the whole dashboard*.
+
+**They coexist nicely.** Weaverlet components are regular Dash components under the hood, so you can use AIO widgets as leaves inside a `WeaverletComponent.get_layout()` without friction. The reverse (Weaverlet inside an AIO) is technically possible but usually awkward — Weaverlet wants to own the lifecycle of its own tree.
+
 ## What's new in 0.3.0
 
 Released April 2026 — full notes in [CHANGELOG.md](CHANGELOG.md).
