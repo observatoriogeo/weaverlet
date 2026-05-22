@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  Vanilla Dash and Dash Pages give you primitives, not encapsulation: callbacks live globally, IDs are strings you manage by hand, and the same widget can't be dropped into two apps without surgery. Weaverlet packages layout + callbacks + state into reusable Python classes, with auto-unique IDs, typed inter-component signals, and a <code>keep_mounted</code> router that preserves WebGL state across navigation.
+  Reusable Python classes that bundle Dash layout, callbacks, and state — with auto-unique IDs, typed inter-component signals, and a <code>keep_mounted</code> router that preserves WebGL state across navigation.
 </p>
 
 <p align="center">
