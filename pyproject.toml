@@ -38,8 +38,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/observatoriogeo/weaverlet"
+Homepage = "https://weaverlet.observatoriogeo.mx"
+Documentation = "https://weaverlet.observatoriogeo.mx"
+Repository = "https://github.com/observatoriogeo/weaverlet"
 Issues = "https://github.com/observatoriogeo/weaverlet/issues"
+Changelog = "https://github.com/observatoriogeo/weaverlet/blob/main/CHANGELOG.md"
 
 [tool.hatch.metadata.hooks.custom]
 # README.md uses a relative image path so GitHub renders the logo with
