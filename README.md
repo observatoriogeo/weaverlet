@@ -11,14 +11,19 @@
 </p>
 
 <p align="center">
+  <a href="https://weaverlet.observatoriogeo.mx"><img src="https://img.shields.io/badge/docs-weaverlet.observatoriogeo.mx-blue.svg" alt="Documentation"></a>
   <a href="https://pypi.org/project/weaverlet/"><img src="https://img.shields.io/pypi/v/weaverlet.svg" alt="PyPI"></a>
   <a href="https://pypi.org/project/weaverlet/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
 </p>
 
+<p align="center">
+  📖 <b>Documentation & home page:</b> <a href="https://weaverlet.observatoriogeo.mx">weaverlet.observatoriogeo.mx</a>
+</p>
+
 ---
 
-Weaverlet, developed by the [Observatorio Metropolitano CentroGeo](https://observatoriogeo.mx), turns a [Plotly Dash](https://dash.plotly.com/) app into a hierarchy of reusable Python classes. Each `WeaverletComponent` owns its own layout, callbacks, and identifiers; you compose them into a tree, hand the root to `WeaverletApp`, and ship.
+Weaverlet, developed by the [Observatorio Metropolitano CentroGeo](https://observatoriogeo.mx), turns a [Plotly Dash](https://dash.plotly.com/) app into a hierarchy of reusable Python classes. Each `WeaverletComponent` owns its own layout, callbacks, and identifiers; you compose them into a tree, hand the root to `WeaverletApp`, and ship. Full documentation lives at [weaverlet.observatoriogeo.mx](https://weaverlet.observatoriogeo.mx).
 
 It's aimed at:
 
