@@ -1,0 +1,98 @@
+---
+title: Shared context
+sidebar_label: Context
+---
+
+# Shared context
+
+The **context** is a Python dict passed once at `WeaverletApp` construction. The framework walks the component DAG and makes that dict available to every component via `self.get_context()`.
+
+It exists to solve one specific problem: distributing app-level config (route prefix, environment flags, the current user) to deeply nested components without prop drilling or module-level globals.
+
+## Setting context
+
+```python
+from weaverlet import WeaverletApp, WeaverletComponent
+from dash import html
+
+class HeaderComponent(WeaverletComponent):
+    def get_layout(self):
+        env = self.get_context().get("environment", "prod")
+        return html.Div(f"Running in: {env}")
+
+class Root(WeaverletComponent):
+    def __init__(self):
+        super().__init__()
+        self.header = HeaderComponent()
+
+    def get_layout(self):
+        return html.Div([self.header()])
+
+WeaverletApp(
+    root_component=Root(),
+    context={"environment": "dev", "feature_flags": {"new_ui": True}},
+).app.run()
+```
+
+Every component reachable from the root can read `self.get_context()` and see the same dict.
+
+## Common keys
+
+Two keys are reserved by framework features:
+
+| Key | Used by | Purpose |
+|---|---|---|
+| `prefix` | `SimpleRouterComponent`, `RedirectComponent` | Path prefix when `use_prefix=True` is set on the router/redirect. |
+| `user` | `AuthRouterComponent` | The logged-in user (set by your login callback into `flask.session`, read back by the framework). |
+
+### `prefix`: deploying under a subpath
+
+When your app lives at `/myapp/` rather than `/`, configure both the router (or redirect) and the context:
+
+```python
+router = SimpleRouterComponent(
+    routes=...,
+    not_found_page_component=NotFound(),
+    use_prefix=True,
+)
+WeaverletApp(root_component=router, context={"prefix": "/myapp"}).app.run()
+```
+
+The router strips the prefix from incoming `pathname`s and prepends it to outgoing hrefs. `RedirectComponent(use_prefix=True)` does the same on the client side.
+
+This is how you serve a Weaverlet app behind a reverse proxy at a non-root URL.
+
+### `user`: auth context
+
+`AuthRouterComponent` sets `user` automatically from `flask.session[user_session_key]` (default key: `"user"`). You don't pass `user` in the app-level context dict; the framework sets it on each request.
+
+If you need to read the user inside a callback, prefer reading `flask.session` directly:
+
+```python
+from flask import session
+
+@app.callback(Output(self.out_id, "children"), Input(self.btn_id, "n_clicks"))
+def show(_):
+    return f"Hello, {session.get('user', 'guest')}"
+```
+
+This is more reliable than capturing `user` from `get_layout` under `keep_mounted=True`, where pages are pre-rendered at startup with `user=None`. See [`AuthRouterComponent`](../routing/auth-router) for the full discussion.
+
+## When to use context vs constructor arguments
+
+Use **constructor arguments** when:
+- The value is specific to one component instance (a label, a default value, a feature toggle for this widget only).
+- You want type safety and discoverability. Constructor args show up in IDEs and type checkers.
+
+Use **context** when:
+- The value applies app-wide and you'd otherwise need to pass it through 5 levels of components.
+- It's a value the framework itself recognizes (`prefix`, `user`).
+- It's a value that changes the *deployment* but not the *app* (environment name, feature flags, API endpoints).
+
+Don't use context for short-lived runtime state. That's what signals and the `StoreComponent` are for. The context dict is treated as effectively read-only after `WeaverletApp` finishes initialization.
+
+## What to read next
+
+- [`SimpleRouterComponent`](../routing/simple-router) and [`use_prefix`](../routing/simple-router#prefixing). The most common context consumer.
+- [Signals overview](../signals/overview). For *mutable* shared state.
+- [`StoreComponent`](../signals/store-component). For shared state with explicit STORE/MERGE/CLEAN operations.

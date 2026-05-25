@@ -1,0 +1,14 @@
+.features {
+  display: flex;
+  align-items: center;
+  padding: 3rem 0;
+  width: 100%;
+}
+
+.feature {
+  margin-bottom: 1.5rem;
+}
+
+.featureLink {
+  font-weight: 600;
+}

@@ -1,0 +1,51 @@
+---
+title: Credits
+sidebar_label: Credits
+---
+
+# Credits
+
+## Author
+
+Weaverlet is developed by **Dr. Alberto García-Robledo** at [CentroGeo](https://www.centrogeo.org.mx/) under [SECIHTI](https://secihti.mx/)'s *Investigadores por México* program. He is a member of the [Observatorio Metropolitano CentroGeo](https://observatoriogeo.mx).
+
+## Affiliation
+
+The framework is part of the open-source toolkit of the **Observatorio Metropolitano CentroGeo**, alongside:
+
+- **[Dash Sylvereye](https://github.com/observatoriogeo/dash-sylvereye)**: interactive visualization of large road networks for Dash dashboards.
+- **[Albatross Hub](https://github.com/observatoriogeo)**: the deployment platform that hosts Observatorio dashboards.
+
+## Built on
+
+Weaverlet stands on the shoulders of several open-source projects:
+
+- **[Plotly Dash](https://dash.plotly.com/)**: the web framework Weaverlet wraps.
+- **[dash-extensions](https://www.dash-extensions.com/)**: `DashProxy`, `Trigger`, `Serverside`, multi-output multiplexing.
+- **[Flask](https://flask.palletsprojects.com/)**: session management for `AuthRouterComponent`.
+- **[ReadMe.LLM](https://readmellm.github.io/)**: the methodology behind Weaverlet's LLM-friendly documentation file.
+
+## License
+
+Weaverlet is [MIT-licensed](https://github.com/observatoriogeo/weaverlet/blob/main/LICENSE). Use it freely in commercial and non-commercial work.
+
+## Citing Weaverlet
+
+If Weaverlet contributes to academic work, please cite it as:
+
+```bibtex
+@software{garcia_robledo_weaverlet,
+  author = {García-Robledo, Alberto},
+  title  = {Weaverlet: Object-oriented framework for Plotly Dash},
+  url    = {https://github.com/observatoriogeo/weaverlet},
+  year   = {2026},
+}
+```
+
+## Contributing
+
+Bug reports, feature requests, and pull requests are welcome at [github.com/observatoriogeo/weaverlet](https://github.com/observatoriogeo/weaverlet). See the project's `CONTRIBUTING.md` for setup and contribution guidelines.
+
+## Acknowledgments
+
+Weaverlet's design draws on ideas from React (component composition), Flux/Redux (signal/store patterns), and the broader Plotly Dash community's exploration of pattern-matching callbacks and All-in-One Components. The `keep_mounted=True` routing strategy is a direct application of the classic React "render-but-hide" trick to Dash's URL-based navigation.

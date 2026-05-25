@@ -1,0 +1,61 @@
+---
+title: EmptyLayoutComponent
+sidebar_label: EmptyLayoutComponent
+---
+
+# `EmptyLayoutComponent`
+
+Minimal placeholder component. Renders a single empty `html.Div`. Useful when you need a `WeaverletComponent` slot in the DAG but no actual content. E.g. as a not-found page that renders nothing, or as a placeholder during early development.
+
+```python
+from weaverlet import EmptyLayoutComponent
+```
+
+## Signature
+
+```python
+class EmptyLayoutComponent(WeaverletComponent):
+
+    _empty_div_id = Identifier()
+
+    def __init__(self, name: str = "unnamed") -> None: ...
+
+    def get_layout(self) -> "dash.html.Div": ...
+```
+
+`get_layout` returns:
+
+```python
+html.Div(id=self._empty_div_id)
+```
+
+— an empty `<div>` with an auto-generated ID. No children, no callbacks, no signals.
+
+## When to use it
+
+- **Quiet 404**: `SimpleRouterComponent(not_found_page_component=EmptyLayoutComponent())` produces a blank page for unmatched URLs instead of a "not found" message.
+- **Slot placeholder** during scaffolding: insert one anywhere you'll later replace with a real component.
+- **Hidden mount**: under `keep_mounted=True`, an empty route that exists only to keep some auxiliary state alive.
+
+## Example
+
+```python
+from weaverlet import (
+    WeaverletApp, WeaverletComponent, SimpleRouterComponent, EmptyLayoutComponent,
+)
+from dash import html
+
+class Home(WeaverletComponent):
+    def get_layout(self): return html.Div("Home")
+
+router = SimpleRouterComponent(
+    routes={"/": Home()},
+    not_found_page_component=EmptyLayoutComponent(),     # quiet 404
+)
+WeaverletApp(root_component=router).app.run()
+```
+
+## See also
+
+- [`WeaverletComponent`](./weaverlet-component)
+- [`SimpleRouterComponent`](./simple-router)

@@ -1,0 +1,186 @@
+---
+title: AuthRouterComponent
+sidebar_label: AuthRouter
+---
+
+# AuthRouterComponent
+
+`AuthRouterComponent` is `SimpleRouterComponent` plus a session-based access check. Routes marked `login_required` redirect unauthenticated visitors to the login route.
+
+It uses `flask.session` for the auth state. Your login flow sets a key in the session, the router reads it before rendering each protected route.
+
+## The basic setup
+
+```python
+from dash import html
+from dash_extensions.enrich import Output, Trigger
+from flask import session
+from weaverlet import (
+    WeaverletComponent, WeaverletApp, Identifier,
+    AuthRouterComponent, RedirectComponent,
+)
+
+
+class LoginPage(WeaverletComponent):
+    login_btn = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.redirect = RedirectComponent()
+
+    def get_layout(self, protected_route):
+        self._target = protected_route       # capture which route they tried to reach
+        return html.Div([
+            self.redirect(),
+            html.Button("Log in as Alice", id=self.login_btn),
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(
+            Output(self.redirect.href_id, self.redirect.href_attr),
+            Trigger(self.login_btn, "n_clicks"),
+        )
+        def login():
+            session["user"] = "Alice"
+            return {"url": self._target, "target": "_self"}
+
+
+class Dashboard(WeaverletComponent):
+    def get_layout(self, user):
+        return html.Div(f"Welcome, {user}!")
+
+
+class NotFound(WeaverletComponent):
+    def get_layout(self, pathname):
+        return html.Div(f"Page {pathname} not found")
+
+
+router = AuthRouterComponent(
+    routes={
+        "/":          {"component": Dashboard(),  "login_required": True},
+        "/login":     {"component": LoginPage(),  "login_required": False},
+    },
+    not_found_page_component=NotFound(),
+)
+
+WeaverletApp(root_component=router).app.run()
+```
+
+Visit `/`: unauthenticated, router redirects to `/login`. Click "Log in as Alice": session gets `user="Alice"`, then redirect to `/` succeeds, dashboard renders "Welcome, Alice!"
+
+## The `routes` schema
+
+Each route value is a dict with two keys:
+
+```python
+{"component": <WeaverletComponent>, "login_required": <bool>}
+```
+
+`login_required=True` routes are protected; `login_required=False` (typically the login page itself) are public.
+
+## What the router does on each request
+
+1. Match the URL against `routes`.
+2. If the matched route has `login_required=True`:
+   - Look for `session[user_session_key]` (default: `"user"`).
+   - If absent → render the login route's component, passing `protected_route=<the original URL>`.
+   - If present → render the matched component, passing `user=<value>`.
+3. If `login_required=False` → render normally.
+
+## Kwargs the router injects
+
+In addition to `SimpleRouterComponent`'s `pathname`, `hash`, `href`, `search`, the auth router can inject:
+
+| Kwarg | What it is | Available to |
+|---|---|---|
+| `user` | The session value (or `None` if not logged in) | Any routed component |
+| `protected_route` | The original URL the visitor was trying to reach | The login page |
+
+As always, declare only what you need in `get_layout`: the router introspects your signature.
+
+## Customizing the session key and login route
+
+```python
+AuthRouterComponent(
+    routes=...,
+    not_found_page_component=...,
+    user_session_key="current_user",     # default: "user"
+    login_route="/signin",                # default: "/login"
+)
+```
+
+## `keep_mounted` and `user`
+
+`AuthRouterComponent` supports `keep_mounted=True` with the same semantics as [`SimpleRouterComponent`](./keep-mounted). There's one subtle gotcha worth flagging:
+
+When `keep_mounted=True`, all routes are pre-rendered at app startup. At that point, no one is logged in. So protected routes get `user=None` baked into their `get_layout` call. This means:
+
+:::warning[Don't capture `user` from `get_layout` under `keep_mounted=True`]
+The captured value will be `None` forever (set once at startup, never updated). Read `flask.session[user_session_key]` from inside your callbacks instead:
+
+```python
+class Dashboard(WeaverletComponent):
+    out_id = Identifier()
+    btn_id = Identifier()
+
+    def get_layout(self):
+        return html.Div([html.Button("Show me", id=self.btn_id), html.Div(id=self.out_id)])
+
+    def register_callbacks(self, app):
+        @app.callback(Output(self.out_id, "children"), Input(self.btn_id, "n_clicks"),
+                      prevent_initial_call=True)
+        def show(_):
+            from flask import session
+            return f"Welcome, {session.get('user')}!"
+```
+
+The login-redirect pattern continues to work. The login wrapper's children are re-rendered on each protected-route redirect, so the `protected_route` capture in `LoginPage` still receives the right value.
+:::
+
+If you don't need `keep_mounted=True`, the default `keep_mounted=False` mode is simpler and lets you safely capture `user` from `get_layout`.
+
+## Logging out
+
+There's no built-in logout. Write it yourself:
+
+```python
+class NavbarComponent(WeaverletComponent):
+    logout_btn = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.redirect = RedirectComponent()
+
+    def get_layout(self):
+        return html.Nav([
+            self.redirect(),
+            html.Button("Log out", id=self.logout_btn),
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(
+            Output(self.redirect.href_id, self.redirect.href_attr),
+            Trigger(self.logout_btn, "n_clicks"),
+        )
+        def logout():
+            session.pop("user", None)
+            return {"url": "/login", "target": "_self"}
+```
+
+## Security caveats
+
+- **Configure Flask's `secret_key`** before deploying. Without it, sessions are unsigned and trivially forged.
+  ```python
+  wapp = WeaverletApp(root_component=router)
+  wapp.app.server.secret_key = os.environ["FLASK_SECRET_KEY"]
+  ```
+- **HTTPS in production.** Session cookies leak otherwise.
+- **Don't store sensitive data in the session**: Flask sessions are client-side by default (a signed cookie, but readable). Use `flask.session` for IDs that reference server-side state, not for raw secrets.
+- **Auth is your responsibility.** `AuthRouterComponent` does not authenticate users. It only checks that *some* session key exists. Your login callback decides whether the credentials were valid before setting the session.
+
+## What to read next
+
+- [`SimpleRouterComponent`](./simple-router). When you don't need auth.
+- [Redirects](./redirects). The underlying client-side navigation primitive.
+- [`AuthRouterComponent` API reference](../api/auth-router). Full signature.
+- [Example 05: Auth router](../examples/auth-router). Minimal runnable demo.

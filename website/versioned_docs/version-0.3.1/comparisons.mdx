@@ -1,0 +1,82 @@
+---
+title: "Weaverlet vs Dash Pages/AIO"
+sidebar_label: "Weaverlet vs Dash Pages/AIO"
+---
+
+# Weaverlet vs the Dash ecosystem
+
+Weaverlet overlaps with two built-in Dash features: **Dash Pages** and **All-in-One Components (AIO)**. The three solve adjacent problems at different scopes. This page compares them honestly so you can pick the right tool. Or combine them.
+
+## Weaverlet vs Dash Pages
+
+[Dash Pages](https://dash.plotly.com/urls) (built into Dash ≥ 2.5) and Weaverlet both handle multi-page Dash, but at different levels of abstraction.
+
+- **Dash Pages is a routing convention.** Drop a file in `pages/`, register it, get a route.
+- **Weaverlet is a component framework.** Write classes, compose them, navigate without losing state.
+
+| Capability | Dash Pages | Weaverlet |
+|---|---|---|
+| Built-in to Dash | ✓ (Dash ≥ 2.5) | One `pip install` |
+| Routing source | Filesystem (`pages/*.py`) | Programmatic `routes` dict, computed at runtime |
+| Path templating (`/users/<id>`) | ✓ | Via `pathname` / `search` parsing |
+| Page-level encapsulation | One module per page | Reusable component classes; same class can power N routes |
+| Cross-page widget reuse | Imports + manual callback wiring | Instantiate the same class anywhere; auto-unique IDs |
+| Inter-component events | `dcc.Store` + global callbacks | `SignalComponent` typed events |
+| **State across navigation** | Unmount + remount on every route change | `keep_mounted=True` preserves React + WebGL state |
+| Auth gating | DIY | `AuthRouterComponent` + Flask sessions |
+| Auto-discovered nav menu | ✓ (`dash.page_registry`) | Build it yourself |
+
+**Reach for Dash Pages when** your dashboard is content-heavy, each page is roughly independent, you want filesystem-driven routing, and you don't need to preserve state across navigation. It's the simpler tool and ships with Dash.
+
+**Reach for Weaverlet when** you have shared widget logic across pages, when WebGL components (maps, network graphs, 3D plots) shouldn't reset on navigation, when you want typed inter-component events instead of `dcc.Store` plumbing, or when your dashboard has grown past the "one file per page" model and needs proper encapsulation.
+
+The two aren't mutually exclusive. Weaverlet apps can coexist alongside a Pages-based site in the same Dash deployment if that fits your migration path.
+
+## Weaverlet vs Dash All-in-One Components
+
+[All-in-One Components](https://dash.plotly.com/all-in-one-components) (AIO, built into Dash ≥ 2.0) and Weaverlet share a goal (bundle a Dash widget's layout and callbacks into one unit) but they operate at different scopes.
+
+- **AIO is a widget pattern.** Subclass `html.Div`, register pattern-matching callbacks once at module level, give each instance a UUID `aio_id`.
+- **Weaverlet is a whole-app framework.** A tree of components with lifecycle hooks, routing, signals, and shared context.
+
+| Capability | Dash AIO | Weaverlet |
+|---|---|---|
+| Built-in to Dash | ✓ (Dash ≥ 2.0) | One `pip install` |
+| ID style | Pattern-matching dicts (`{'component': ..., 'aio_id': uuid}`) | Flat strings via `Identifier()` descriptor |
+| Callback registration | Once at module level via `MATCH` / `ALL` | Per instance, in `register_callbacks(self, app)` |
+| Instance state on `self` | Awkward (callbacks are module-level free functions) | Native (callbacks close over `self`) |
+| Composing hierarchies | Limited. Each AIO is typically a leaf | DAG of nested components; parent/child wiring is automatic |
+| Multipage routing | Not provided (pair with Dash Pages or DIY) | `SimpleRouterComponent` + `AuthRouterComponent` |
+| Inter-component events | Pattern-matching callbacks or DIY `dcc.Store` | Typed `SignalComponent` events |
+| State across navigation | Up to surrounding router (none by default) | `keep_mounted=True` preserves React + WebGL state |
+| Shared context / config | DIY | Built-in dict propagated to every component |
+| Auth gating | DIY | `AuthRouterComponent` + Flask sessions |
+
+**Reach for AIO when** you're building a single reusable widget (a fancy date picker, a search box, a chart-with-controls) to drop into existing Dash apps, especially when you want many instances and need to operate on all of them at once via pattern-matching. It's the lighter pattern for *one widget*.
+
+**Reach for Weaverlet when** you're structuring a full application. Multipage, auth, signal flows, shared context, state-preserving navigation. It's the framework for *the whole dashboard*.
+
+**They coexist nicely.** Weaverlet components are regular Dash components under the hood, so you can use AIO widgets as leaves inside a `WeaverletComponent.get_layout()` without friction. The reverse (Weaverlet inside an AIO) is technically possible but usually awkward. Weaverlet wants to own the lifecycle of its own tree.
+
+## Weaverlet vs `dash_extensions.enrich` directly
+
+Weaverlet builds on `dash_extensions.enrich`. You can ignore Weaverlet and use enrich directly. `DashProxy`, `Trigger`, `Serverside`, `MultiplexerTransform`: and get many of the same primitives.
+
+The differences:
+
+- **Weaverlet adds class-based encapsulation.** Without it, `enrich` is still callback-soup.
+- **Weaverlet adds the router story.** `enrich` has no `keep_mounted=True` equivalent.
+- **Weaverlet adds typed signals.** Without it, you write the same `dcc.Store` + `MultiplexerTransform` pattern by hand for every cross-component event.
+- **Weaverlet hides `DashProxy` setup.** `WeaverletApp` constructs the proxy with sensible defaults; you don't have to know it's there.
+
+If you're already deep in `dash_extensions.enrich` patterns and don't need routing/state preservation, Weaverlet is incremental value. If you're staring at a 2000-line `app.py` with global callbacks and string IDs everywhere, Weaverlet is a different conversation.
+
+## Summary
+
+| Need | Reach for |
+|---|---|
+| Filesystem routing, content site | Dash Pages |
+| One reusable widget across many apps | Dash AIO |
+| Multipage app, shared widgets, WebGL state preservation | Weaverlet |
+| Callback ergonomics only | `dash_extensions.enrich` (or Weaverlet, which builds on it) |
+| Full dashboard with auth | Weaverlet |

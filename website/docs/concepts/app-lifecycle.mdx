@@ -1,0 +1,125 @@
+---
+title: WeaverletApp lifecycle
+sidebar_label: App lifecycle
+---
+
+# WeaverletApp lifecycle
+
+`WeaverletApp` is the orchestrator. You hand it a root component and it produces a regular Dash app, ready to run.
+
+```python
+from weaverlet import WeaverletApp, WeaverletComponent
+from dash import html
+
+class Root(WeaverletComponent):
+    def get_layout(self):
+        return html.Div("Hello")
+
+wapp = WeaverletApp(
+    root_component=Root(),
+    context={"environment": "dev"},
+    title="My App",
+)
+wapp.app.run(port=8050)
+```
+
+## The 4-step lifecycle
+
+When you call `WeaverletApp(root_component=root)`, it does the following, in order:
+
+### 1. Construct the underlying Dash app
+
+`WeaverletApp.app` is a [`dash_extensions.enrich.DashProxy`](https://www.dash-extensions.com/), not a plain `dash.Dash`. The proxy gives you:
+
+- `group=` multi-output callbacks (multiple callbacks can write to the same `Output`).
+- `Serverside(...)` return-value wrappers for server-side caching.
+- `dash_extensions.javascript.assign()` for client-side JS hooks.
+- All standard Dash features unchanged.
+
+Extra kwargs to `WeaverletApp(...)` flow through to the proxy. `title`, `external_stylesheets`, `suppress_callback_exceptions`, `prevent_initial_callbacks`, and any other Dash kwarg via `**dash_kwargs`.
+
+### 2. Walk the component DAG
+
+Starting from `root_component`, Weaverlet walks the parent → child graph by introspecting each component's `__dict__` for attributes that are themselves `WeaverletComponent` instances (plus the `ComponentsDict` / `ComponentsList` / `ComponentsOrderedDict` collection types for routers and similar).
+
+The walk:
+- Detects cycles via a `visited` set; cycles must be broken explicitly with [`DetachedComponentRef`](./dag-composition#cycles).
+- Propagates the `context` dictionary so every component can call `self.get_context()`.
+- Runs each component's `initialize()` hook (if defined).
+
+### 3. Register every callback
+
+After the walk, `WeaverletApp` calls `register_callbacks(self.app)` on every component in the DAG. Each component registers only the callbacks it owns; the framework guarantees the order is deterministic.
+
+### 4. Build the layout
+
+Finally, `WeaverletApp` calls `root_component.get_layout()` and assigns the result as the Dash app's layout. From this point on, the app is ready to serve.
+
+## Running the app
+
+### Local development
+
+```python
+wapp.app.run(port=8050, debug=True)
+```
+
+:::warning[`app.run_server` is removed in Dash 4]
+Use `wapp.app.run(...)`: `wapp.app.run_server(...)` no longer exists. If you're porting code from a Dash 2.x / pre-0.3 Weaverlet codebase, this is the most common breaking change.
+:::
+
+### Jupyter
+
+Dash 4 absorbed Jupyter support into core. Pass `jupyter_mode` to `app.run`:
+
+```python
+wapp.app.run(jupyter_mode="inline")     # or "tab" or "external"
+```
+
+No extras needed. Don't pass `jupyter_mode=True` to `WeaverletApp(...)`: it was removed in 0.3.1 (it raises `TypeError` with a migration message).
+
+### Production (WSGI)
+
+```python
+# app.py
+from weaverlet import WeaverletApp, WeaverletComponent
+from dash import html
+
+class Root(WeaverletComponent):
+    def get_layout(self):
+        return html.Div("Hello")
+
+application = WeaverletApp(root_component=Root()).app.server
+```
+
+Then run with `gunicorn`:
+
+```bash
+gunicorn app:application -w 2 -b 0.0.0.0:8080
+```
+
+## The `assets_folder` auto-resolution
+
+`WeaverletApp` auto-resolves `assets_folder` to `dirname(sys.modules['__main__'].__file__) + "/assets"`. This matters for libraries that write JS files to `assets/` at runtime. Most notably `dash_extensions.javascript.assign()`, which writes to a CWD-relative path by default.
+
+If you run your app from an IDE, `uv run`, or a test runner where the CWD differs from the script directory, this auto-resolution prevents the "No match for function0" errors you'd otherwise see from `dash-leaflet` style handlers and similar libraries.
+
+Override explicitly if you need to:
+
+```python
+wapp = WeaverletApp(root_component=root, assets_folder="/path/to/assets")
+```
+
+## Attributes after construction
+
+| Attribute | Type | What it is |
+|---|---|---|
+| `wapp.app` | `DashProxy` | The underlying Dash app. Use `wapp.app.run(...)`, `wapp.app.server`, etc. |
+| `wapp.root_component` | `WeaverletComponent` | The root you passed in. |
+| `wapp.root` | `WeaverletComponent` | Alias for `root_component`. |
+| `wapp.context` | `dict` | The context dict (defaults to `{}` if not passed). |
+
+## What to read next
+
+- [DAG composition](./dag-composition). How components own each other.
+- [Context](./context). How the `context` dict flows through the DAG.
+- [`WeaverletApp` API reference](../api/weaverlet-app). Full signature.

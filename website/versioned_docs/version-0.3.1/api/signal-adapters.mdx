@@ -1,0 +1,194 @@
+---
+title: Signal adapters
+sidebar_label: Signal adapters
+---
+
+# Signal adapters
+
+Helper functions that turn a `SignalComponent` (or `DivSignalComponent`, or `StoreComponent.input_signal`) into a Dash callback dependency. Five adapter functions plus `Serverside`.
+
+```python
+from weaverlet import (
+    SignalInput, SignalOutput, SignalTrigger, SignalState, SignalGroup,
+    ServersideSignalOutput, Serverside,
+)
+```
+
+## Summary
+
+| Adapter | Returns | Used as |
+|---|---|---|
+| [`SignalInput(sig)`](#signalinput) | `Input` | Receive a payload from a signal |
+| [`SignalOutput(sig)`](#signaloutput) | `Output` | Emit a payload to a signal |
+| [`SignalTrigger(sig)`](#signaltrigger) | `Trigger` | React to a signal edge without the payload |
+| [`SignalState(sig)`](#signalstate) | `State` | Read a signal's current value without it firing the callback |
+| [`SignalGroup(sig)`](#signalgroup) | `str` (the group ID) | Group multi-output callbacks targeting the same signal |
+| [`ServersideSignalOutput(sig)`](#serversidesignaloutput) | `Output` | Same as `SignalOutput`; pair with `Serverside(...)` on the return value |
+| [`Serverside(value)`](#serverside) | Wrapped value | Cache the wrapped object server-side; only a token crosses the wire |
+
+All adapters take any object with `.signal_id` and `.signal_attr` attributes. That's `SignalComponent`, `DivSignalComponent`, and `StoreComponent.input_signal`.
+
+## `SignalInput`
+
+```python
+def SignalInput(signal) -> Input:
+    return Input(signal.signal_id, signal.signal_attr)
+```
+
+Equivalent to `Input(signal.signal_id, signal.signal_attr)`. The decorated callback fires whenever the signal emits, and receives the emitted payload as an argument.
+
+```python
+@app.callback(Output(self.out_id, "children"), SignalInput(self.sig))
+def show(payload):
+    return f"Got: {payload}"
+```
+
+## `SignalOutput`
+
+```python
+def SignalOutput(signal) -> Output:
+    return Output(signal.signal_id, signal.signal_attr)
+```
+
+Equivalent to `Output(signal.signal_id, signal.signal_attr)`. The decorated callback must return a dict; the dict becomes the emitted payload.
+
+```python
+@app.callback(SignalOutput(self.sig), Input(self.btn, "n_clicks"))
+def emit(n):
+    return {"clicks": n}
+```
+
+## `SignalTrigger`
+
+```python
+def SignalTrigger(signal) -> Trigger:
+    return Trigger(signal.signal_id, signal.signal_attr)
+```
+
+Equivalent to `Trigger(signal.signal_id, signal.signal_attr)` (`Trigger` comes from `dash_extensions.enrich`). The callback fires on emission, but receives no argument:
+
+```python
+@app.callback(Output(self.out, "children"), SignalTrigger(self.sig))
+def show():
+    return "fired!"
+```
+
+Don't confuse `SignalTrigger(sig)` with `Trigger(component_id, prop)`: `Trigger` turns any Dash prop into a no-payload Input; `SignalTrigger` turns a signal into a no-payload Input.
+
+## `SignalState`
+
+```python
+def SignalState(signal) -> State:
+    return State(signal.signal_id, signal.signal_attr)
+```
+
+Equivalent to `State(signal.signal_id, signal.signal_attr)`. Use this to read a signal's current value inside a callback that's fired by *something else*:
+
+```python
+@app.callback(
+    Output(self.out, "children"),
+    Input(self.refresh_btn, "n_clicks"),
+    SignalState(self.sig),         # read current signal value, but don't fire on signal change
+)
+def show(_, current_signal_payload):
+    return f"Refreshed with: {current_signal_payload}"
+```
+
+## `SignalGroup`
+
+```python
+def SignalGroup(signal) -> str:
+    return signal.signal_group_id
+```
+
+Returns the signal's `signal_group_id` (an `Identifier`-generated string). Use it with `dash_extensions.enrich`'s `group=` parameter when wiring multiple callbacks to the same `Output(signal.signal_id, ...)`. **Different return type** from the other adapters. This one returns a string, not a Dash dep.
+
+```python
+@app.callback(
+    SignalOutput(self.sig),
+    Input(self.src_a, "value"),
+    group=SignalGroup(self.sig),
+)
+def from_a(v): ...
+
+@app.callback(
+    SignalOutput(self.sig),
+    Input(self.src_b, "value"),
+    group=SignalGroup(self.sig),
+)
+def from_b(v): ...
+```
+
+In practice you rarely need to set `group=` manually. `WeaverletApp.app` is a `DashProxy` with default group-handling that lets multiple writers share an Output without explicit groups. `SignalGroup` is mostly there for advanced multi-output orchestration.
+
+## `ServersideSignalOutput`
+
+```python
+def ServersideSignalOutput(signal) -> Output:
+    # In dash-extensions 2.x, Serverside is applied to the return value,
+    # not the Output declaration. ServersideSignalOutput is kept for
+    # API symmetry with older code; functionally identical to SignalOutput.
+    return Output(signal.signal_id, signal.signal_attr)
+```
+
+In `dash_extensions 0.0.65` (the version Weaverlet 0.2.x used), `ServersideOutput` was a distinct Output type that signaled "cache the return value." In `dash_extensions ≥ 1.0` (Weaverlet 0.3+), serverside caching is triggered by wrapping the **return value** with `Serverside(...)` instead. So `ServersideSignalOutput(sig)` is now functionally identical to `SignalOutput(sig)`: it's preserved for API symmetry.
+
+Use it for readability:
+
+```python
+@app.callback(ServersideSignalOutput(self.sig), Input(self.btn, "n_clicks"))
+def load(_):
+    df = pd.read_csv("large.csv")
+    return Serverside(df)             # ← this is what triggers caching
+```
+
+## `Serverside`
+
+```python
+# Re-exported from dash_extensions.enrich
+Serverside(value)
+```
+
+A value wrapper. Apply it to the return value of a callback to cache the object server-side; only a token is sent to the browser. Pair with `ServersideSignalOutput(sig)` for documentation clarity, or use with a plain `SignalOutput(sig)`: both work.
+
+```python
+from weaverlet import Serverside
+import pandas as pd
+
+@app.callback(SignalOutput(self.sig), Input(self.btn, "n_clicks"))
+def load(_):
+    df = pd.read_csv("/path/to/large.csv")
+    return Serverside(df)
+```
+
+The downstream consumer receives the cached object directly:
+
+```python
+@app.callback(Output(self.out, "children"), SignalInput(self.sig))
+def show(df):
+    return html.Pre(df.head().to_string())
+```
+
+For multi-worker production deployments, configure a shared cache backend (Redis, filesystem). See [`dash_extensions` serverside docs](https://www.dash-extensions.com/sections/serverside).
+
+## Pitfalls
+
+:::warning[`SignalGroup` returns a string, not a Dash dep]
+Easy to misuse. Pass it as `group=SignalGroup(sig)`, not in the positional Inputs/Outputs.
+:::
+
+:::warning[`ServersideSignalOutput` does nothing on its own]
+In 0.3+ it's just `SignalOutput`. The caching is triggered by wrapping the return value with `Serverside(...)`. Using `ServersideSignalOutput` without `Serverside(...)` produces a regular non-cached callback.
+:::
+
+:::warning[`Serverside` needs cache configuration in production]
+The default cache is in-memory and scoped to one Flask process. Multi-worker deployments must share state through a Redis or filesystem cache. Otherwise workers won't see each other's cached values.
+:::
+
+## See also
+
+- [`SignalComponent`](./signal)
+- [`DivSignalComponent`](./div-signal)
+- [Signals. Concept](../signals/overview)
+- [Serverside signals. Concept](../signals/serverside)
+- [Examples 07, 08, 09](../examples)

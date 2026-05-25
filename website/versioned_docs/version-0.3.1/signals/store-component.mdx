@@ -1,0 +1,132 @@
+---
+title: StoreComponent
+sidebar_label: Store
+---
+
+# StoreComponent
+
+`StoreComponent` is shared, mutable, app-wide state with explicit **STORE / MERGE / CLEAN** operations. Where a `SignalComponent` is a transient event bus, a `StoreComponent` is a persistent piece of state that callbacks read and write.
+
+Use it when:
+- You need state shared across components in different subtrees.
+- A signal would over-fire (every emission triggers consumers; the store fires only when its value changes).
+- You want explicit operation semantics. "this callback merges into the store" is more legible than "this callback emits an arbitrary dict".
+
+## Operations
+
+```python
+from weaverlet import StoreComponentOp
+
+StoreComponentOp.STORE   # = "store" — overwrite the entire store value
+StoreComponentOp.MERGE   # = "merge" — shallow-merge a dict into the store
+StoreComponentOp.CLEAN   # = "clean" — reset the store to its initial value
+```
+
+A writer callback emits an **op dict** to the store's input signal:
+
+```python
+{"op": StoreComponentOp.STORE, "data": {"user": "Alice", "theme": "dark"}}
+{"op": StoreComponentOp.MERGE, "data": {"theme": "light"}}    # only theme changes
+{"op": StoreComponentOp.CLEAN}                                  # reset
+```
+
+## The pattern
+
+```python
+from weaverlet import (
+    WeaverletComponent, WeaverletApp, Identifier,
+    StoreComponent, StoreComponentOp,
+    SignalOutput, SignalInput,
+)
+from dash_extensions.enrich import Input, Output
+from dash import html
+
+
+class App(WeaverletComponent):
+    set_btn = Identifier()
+    merge_btn = Identifier()
+    clean_btn = Identifier()
+    display_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.store = StoreComponent()
+
+    def get_layout(self):
+        return html.Div([
+            self.store(),
+            html.Button("Set theme=dark", id=self.set_btn),
+            html.Button("Merge user=Alice", id=self.merge_btn),
+            html.Button("Clean", id=self.clean_btn),
+            html.Pre(id=self.display_id),
+        ])
+
+    def register_callbacks(self, app):
+        # Writers: each one emits an op-dict to the store's input signal.
+        @app.callback(SignalOutput(self.store.input_signal),
+                      Input(self.set_btn, "n_clicks"),
+                      prevent_initial_call=True)
+        def set_theme(_):
+            return {"op": StoreComponentOp.STORE,
+                    "data": {"theme": "dark"}}
+
+        @app.callback(SignalOutput(self.store.input_signal),
+                      Input(self.merge_btn, "n_clicks"),
+                      prevent_initial_call=True)
+        def merge_user(_):
+            return {"op": StoreComponentOp.MERGE,
+                    "data": {"user": "Alice"}}
+
+        @app.callback(SignalOutput(self.store.input_signal),
+                      Input(self.clean_btn, "n_clicks"),
+                      prevent_initial_call=True)
+        def clean(_):
+            return {"op": StoreComponentOp.CLEAN}
+
+        # Reader: any callback can read the store's value as a SignalInput.
+        @app.callback(Output(self.display_id, "children"),
+                      Input(self.store.store_id, "data"))
+        def show(state):
+            return f"Store: {state}"
+
+WeaverletApp(root_component=App()).app.run()
+```
+
+Click "Set theme=dark" → `{"theme": "dark"}`. Click "Merge user=Alice" → `{"theme": "dark", "user": "Alice"}`. Click "Clean" → store resets.
+
+## How the multiplexing works
+
+Multiple writer callbacks all targeting `SignalOutput(self.store.input_signal)` is something stock Dash would reject. Only one callback may write to each Output. Weaverlet handles this because `WeaverletApp.app` is a `DashProxy`, which provides `group=` multi-output multiplexing transparently.
+
+If you're hand-building a Dash app and want this behavior, you'd need to set up `dash_extensions.enrich.MultiplexerTransform()` yourself. Weaverlet does it for free.
+
+## Reading the store
+
+Two equivalent ways to read:
+
+```python
+# 1. Direct Input on the store's underlying dcc.Store id
+Input(self.store.store_id, "data")
+
+# 2. SignalInput — the store also exposes itself as a signal
+SignalInput(self.store)                # treats store as a signal source
+```
+
+Both fire whenever the store's value changes (and on initial load unless `prevent_initial_call=True`).
+
+## `StoreComponent` vs `SignalComponent`
+
+| | `SignalComponent` | `StoreComponent` |
+|---|---|---|
+| Lifecycle | Transient event (fires on every emit) | Persistent state |
+| API | Emit any dict | Emit op-dicts (`STORE`, `MERGE`, `CLEAN`) |
+| Fan-in writers | Yes (multiplexed) | Yes (multiplexed) |
+| Best for | Events, button clicks, computed payloads | App state. User, theme, current dataset |
+
+Use signals for **what just happened**; use stores for **what currently is**.
+
+## What to read next
+
+- [Signals overview](./overview). When to reach for signals vs stores.
+- [`StoreComponent` API reference](../api/store). Full signatures.
+- [Serverside](./serverside). For stores holding large data.

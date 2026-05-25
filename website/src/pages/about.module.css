@@ -1,0 +1,36 @@
+.about {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+.about h1 {
+  margin-bottom: 2rem;
+}
+
+.about h2 {
+  margin-top: 3rem;
+  margin-bottom: 1rem;
+}
+
+.affiliations {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+
+.affiliationColumn {
+  flex: 1;
+  min-width: 240px;
+  text-align: center;
+  padding: 1.5rem;
+  border-radius: 8px;
+  background: var(--ifm-background-surface-color);
+}
+
+.affiliationLogo {
+  max-width: 200px;
+  height: auto;
+  margin-bottom: 1rem;
+}

@@ -1,0 +1,41 @@
+/**
+ * Weaverlet docs theme. Deep navy primary, brighter blue for body links.
+ *
+ * Logo stroke:           original blue (#0c8dd1, lighter)
+ * Primary (light mode):  #004a78 (deep navy)
+ * Link color (light):    #1976d2 (Material Blue 700, brighter for body-link contrast)
+ * Primary (dark mode):   #64b5f6 (Material Blue 300, lighter for dark bg)
+ */
+
+:root {
+  --ifm-color-primary: #004a78;
+  --ifm-color-primary-dark: #00436c;
+  --ifm-color-primary-darker: #003f66;
+  --ifm-color-primary-darkest: #003454;
+  --ifm-color-primary-light: #005184;
+  --ifm-color-primary-lighter: #00558a;
+  --ifm-color-primary-lightest: #006aa9;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+
+  /* Links use a brighter blue than the primary so they read as links
+     against body text. The primary stays for hero/buttons/sidebar accents. */
+  --ifm-link-color: #1976d2;
+  --ifm-link-hover-color: var(--ifm-color-primary);
+}
+
+/* Lighter Material Blue in dark mode for readability against dark backgrounds. */
+[data-theme='dark'] {
+  --ifm-color-primary: #64b5f6;
+  --ifm-color-primary-dark: #4da9f4;
+  --ifm-color-primary-darker: #41a3f3;
+  --ifm-color-primary-darkest: #1989ec;
+  --ifm-color-primary-light: #7bc1f8;
+  --ifm-color-primary-lighter: #88c7f8;
+  --ifm-color-primary-lightest: #b1dafa;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+
+  /* Dark mode link color follows primary (already bright enough on dark bg). */
+  --ifm-link-color: var(--ifm-color-primary);
+  --ifm-link-hover-color: var(--ifm-color-primary-light);
+}

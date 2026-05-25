@@ -1,0 +1,90 @@
+---
+title: "11: DBC single page"
+sidebar_label: "11: DBC single"
+---
+
+# 11: DBC single page
+
+> A single-page app that combines Weaverlet with [Dash Bootstrap Components](https://dash-bootstrap-components.opensource.faculty.ai/). A `NavbarSimple` at the top, a `Container` with a markdown heading underneath. Shows how to integrate third-party Dash component libraries with Weaverlet's class-based composition.
+
+## The script
+
+```python
+# -*- coding: utf-8 -*-
+
+from dash import html, dcc
+import dash_bootstrap_components as dbc
+from weaverlet.base import WeaverletApp, WeaverletComponent
+
+
+class PrimaryNavbarComponent(WeaverletComponent):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def get_layout(self, brand):
+        layout = \
+            dbc.NavbarSimple(
+                brand=brand,
+                color='primary',
+                dark=True
+            )
+
+        return layout
+
+
+class MainPageComponent(WeaverletComponent):
+
+    def __init__(self, brand):
+        super().__init__()
+        self.primary_navbar = PrimaryNavbarComponent(name='primary_navbar')
+        self.brand = brand
+
+    def get_layout(self):
+        layout = \
+            html.Div(
+                [
+                    self.primary_navbar(brand=self.brand),  # child component
+                    dbc.Container(
+                        [
+                            dcc.Markdown("# Hello world.")  # child component
+                        ],
+                        fluid=False,
+                        style={"padding": "0px", 'width': "100%"}
+                    )
+                ]
+            )
+
+        return layout
+
+
+main_page = MainPageComponent(brand='Brand of page')
+wapp = WeaverletApp(root_component=main_page,
+                    title='Simple Weaverlet + DBC app',
+                    external_stylesheets=[dbc.themes.BOOTSTRAP])
+wapp.app.run()
+```
+
+## Expected output
+
+- A blue Bootstrap navbar at the top labeled "Brand of page".
+- A container below with the heading "Hello world."
+
+## Notes
+
+- DBC plays nicely with Weaverlet. It ships regular Dash components, which work inside `get_layout` like any other Dash primitive.
+- Pass the DBC theme via `external_stylesheets=[dbc.themes.BOOTSTRAP]` to `WeaverletApp(...)`. Any Dash kwarg works the same way. Weaverlet flows them through to the underlying `DashProxy`.
+- `PrimaryNavbarComponent.get_layout(brand)` takes the navbar text as a positional argument; the parent passes it via `self.primary_navbar(brand=self.brand)`. Component arguments are just Python. Pass whatever you want.
+- This example requires the `examples` extra: `pip install "weaverlet[examples]"` (pulls in DBC).
+
+## Try it locally
+
+```bash
+pip install "weaverlet[examples]"
+python dbc_app.py
+```
+
+## See also
+
+- [Components. Concept](../concepts/components)
+- [Example 12: DBC multipage](./dbc-multipage). Same pattern, plus a router.

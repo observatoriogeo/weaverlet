@@ -1,0 +1,86 @@
+---
+title: Quickstart
+sidebar_label: Quickstart
+---
+
+# Quickstart
+
+The smallest non-trivial Weaverlet app. A single-page component that echoes whatever you type.
+
+## The full script
+
+```python
+from weaverlet import WeaverletComponent, WeaverletApp, Identifier
+from dash_extensions.enrich import Input, Output
+from dash import html, dcc
+
+
+class EchoComponent(WeaverletComponent):
+    text_input_id = Identifier()
+    echo_div_id = Identifier()
+
+    def get_layout(self):
+        return html.Div([
+            dcc.Input(id=self.text_input_id, type="text", placeholder="Type here..."),
+            html.Div(id=self.echo_div_id),
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(Output(self.echo_div_id, "children"),
+                      Input(self.text_input_id, "value"))
+        def echo(text_value):
+            return text_value or ""
+
+
+WeaverletApp(root_component=EchoComponent()).app.run()
+```
+
+Save this as `quickstart.py` and run it:
+
+```bash
+python quickstart.py
+```
+
+Open `http://localhost:8050/` and type. The text appears below the input in real time.
+
+## What's happening
+
+Three Weaverlet idioms appear in those ~20 lines:
+
+### 1. Subclass `WeaverletComponent`
+
+Every UI block in a Weaverlet app is a subclass of `WeaverletComponent`. The subclass owns its layout (via `get_layout`), its callbacks (via `register_callbacks`), and its element IDs.
+
+### 2. Declare IDs with `Identifier()`
+
+```python
+text_input_id = Identifier()
+echo_div_id = Identifier()
+```
+
+`Identifier()` is a descriptor. When you access `self.text_input_id`, it returns a globally-unique string ID (something like `EchoComponent_text_input_id_0x7f...`). You never assemble these strings yourself. And you never get `DuplicateIdError` from accidentally reusing a string.
+
+You can instantiate `EchoComponent()` twice on the same page and Dash treats each one as completely independent.
+
+### 3. Hand the root to `WeaverletApp`
+
+```python
+WeaverletApp(root_component=EchoComponent()).app.run()
+```
+
+`WeaverletApp` walks the component DAG once at startup:
+
+1. Calls each component's `initialize()` hook (if defined).
+2. Propagates the shared context dictionary to every component.
+3. Registers every component's callbacks against the underlying [`DashProxy`](https://www.dash-extensions.com/).
+4. Builds the layout by calling `get_layout()` on the root.
+
+After that, `wapp.app` is a regular Dash app. `wapp.app.run()` starts the dev server, and `wapp.app.server` exposes the WSGI entrypoint for production deployment.
+
+:::tip[Modern callback imports]
+Use `from dash_extensions.enrich import Input, Output` instead of `from dash.dependencies import Input, Output`. Weaverlet builds on `dash_extensions.enrich`, which adds `Trigger`, `Serverside(...)`, and `group=` multi-output callbacks on top of stock Dash.
+:::
+
+## Next step
+
+Go to [Your first Weaverlet app](./first-app) to build something bigger. A small multipage app with shared state and a router.

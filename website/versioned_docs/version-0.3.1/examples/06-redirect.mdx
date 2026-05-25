@@ -1,0 +1,101 @@
+---
+title: "06: Redirect"
+sidebar_label: "06: Redirect"
+---
+
+# 06: Redirect
+
+> A button that programmatically navigates the browser to another route. Uses `RedirectComponent` outside the auth context. Same primitive, simpler setup.
+
+## The script
+
+```python
+from dash import html
+from dash_extensions.enrich import Output, Trigger
+from weaverlet.base import WeaverletComponent, WeaverletApp, Identifier
+from weaverlet.components import SimpleRouterComponent, RedirectComponent
+
+
+class RedirectPageComponent(WeaverletComponent):
+
+    redirect_button_id = Identifier()
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.redirect_component = RedirectComponent()
+
+    def get_layout(self, pathname, hash, href, search):
+        return html.Div(
+            [
+                self.redirect_component(),  # child component
+                html.Button('Click to redirect to another page', id=self.redirect_button_id)
+            ]
+        )
+
+    def register_callbacks(self, app):
+        @app.callback(
+            Output(self.redirect_component.href_id,
+                   self.redirect_component.href_attr),
+            Trigger(self.redirect_button_id, 'n_clicks')
+        )
+        def redirect():
+            return {'url': '/another_page', 'target': '_self'}
+
+class AnotherPageComponent(WeaverletComponent):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def get_layout(self, pathname, hash, href, search):
+        return html.Div(f'Hello from another page!')
+
+class PageNotFoundComponent(WeaverletComponent):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def get_layout(self, pathname):
+        return html.Div(f'Page not found!')
+
+redirect_page_component = RedirectPageComponent()
+another_page_component = AnotherPageComponent()
+not_found_page_component = PageNotFoundComponent()
+
+
+routes = {
+    '/': redirect_page_component,
+    '/another_page': another_page_component
+}
+router_component = SimpleRouterComponent(
+    routes=routes,
+    not_found_page_component=not_found_page_component
+)
+
+wapp = WeaverletApp(root_component=router_component)
+wapp.app.run(port=8089)
+```
+
+## Expected output
+
+- Visit `/` → "Click to redirect to another page" button.
+- Click it → browser navigates to `/another_page`, which shows "Hello from another page!"
+
+## Notes
+
+- A `RedirectComponent` instance owns the client-side navigation machinery. Declare it in `__init__`, render it once in `get_layout` via `self.redirect_component()`.
+- The redirect dict has two keys: `url` (the target) and `target` (`_self` to replace the current tab, `_blank` to open a new one).
+- `Trigger(button_id, 'n_clicks')` (from `dash_extensions.enrich`) is the no-payload equivalent of `Input`: the callback fires on click but doesn't receive the click count.
+- For redirects under a subpath deployment, instantiate with `RedirectComponent(use_prefix=True)` and configure `WeaverletApp(context={'prefix': '/your_prefix'})`. The prefix is then injected client-side.
+
+## Try it locally
+
+```bash
+pip install weaverlet
+python redirect_app.py
+```
+
+## See also
+
+- [Redirects. Concept](../routing/redirects)
+- [`RedirectComponent`: API reference](../api/redirect)
+- [`SimpleRouterComponent`: API reference](../api/simple-router)

@@ -1,0 +1,155 @@
+---
+title: "12: DBC multipage"
+sidebar_label: "12: DBC multipage"
+---
+
+# 12: DBC multipage
+
+> A two-page DBC app with a router. Each page is a `MainPageComponent` that owns a navbar plus a content area, and the router maps URL paths to specific instances. Shows the canonical Weaverlet "shell + pages" composition.
+
+## The script
+
+```python
+# -*- coding: utf-8 -*-
+
+from dash import html, dcc
+import dash_bootstrap_components as dbc
+from weaverlet.base import WeaverletApp, WeaverletComponent, Identifier
+from weaverlet.components import SimpleRouterComponent
+
+
+class PrimaryNavbarComponent(WeaverletComponent):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def get_layout(self, brand):
+        layout = \
+            dbc.NavbarSimple(
+                children=[
+                    dbc.NavItem(dbc.NavLink('Page A', href='/a')),
+                    dbc.NavItem(dbc.NavLink('Page B', href='/b'))
+                ],
+                brand=brand,
+                color='primary',
+                dark=True
+            )
+
+        return layout
+
+
+class MainPageComponent(WeaverletComponent):
+
+    def __init__(self, brand, page_content_component):
+        super().__init__()
+        self.primary_navbar = PrimaryNavbarComponent(name='primary_navbar')
+        self.page_content_component = page_content_component
+        self.brand = brand
+
+    def get_layout(self, pathname, hash, href, search):
+        layout = \
+            html.Div(
+                [
+                    self.primary_navbar(brand=self.brand),  # child component
+                    dbc.Container(
+                        [
+                            self.page_content_component()  # child component
+                        ],
+                        fluid=True,
+                        style={"padding": "0px", 'width': "100%"}
+                    )
+                ]
+            )
+
+        return layout
+
+
+class ContentComponent(WeaverletComponent):
+
+    def __init__(self, body, **kwargs):
+        super().__init__(**kwargs)
+        self.body = body
+
+    def get_layout(self):
+        layout = \
+            dbc.Container([
+                dcc.Markdown(self.body)
+            ])
+
+        return layout
+
+
+class NotFoundPageComponent(WeaverletComponent):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def get_layout(self, pathname):
+        layout = \
+            dcc.Markdown(f"# Page {pathname} not found!")
+
+        return layout
+
+
+page_a_markdown = """
+# Page A \
+
+This is the content of Page A.
+"""
+
+page_b_markdown = """
+# Page B \
+
+This is the content of Page B.
+"""
+
+content_page_a = ContentComponent(body=page_a_markdown)
+content_page_b = ContentComponent(body=page_b_markdown)
+page_a_main_page = MainPageComponent(brand='Brand of Page A',
+                                     page_content_component=content_page_a)
+page_b_main_page = MainPageComponent(brand='Brand of Page B',
+                                     page_content_component=content_page_b)
+not_found_page = NotFoundPageComponent()
+
+routes = {
+    '/': page_a_main_page,
+    '/a': page_a_main_page,
+    '/b': page_b_main_page
+}
+router = SimpleRouterComponent(
+    routes=routes,
+    not_found_page_component=not_found_page
+)
+wapp = WeaverletApp(root_component=router,
+                    title='Simple Weaverlet + DBC app',
+                    external_stylesheets=[dbc.themes.COSMO])
+
+wapp.app.run()
+```
+
+## Expected output
+
+- Navbar with brand text and links to "Page A" and "Page B".
+- Visiting `/` or `/a` → Page A's brand and content.
+- Visiting `/b` → Page B's brand and content.
+- The navbar's brand text changes per page because each `MainPageComponent` instance has its own `brand`.
+
+## Notes
+
+- `MainPageComponent` parameterizes both the brand and the content component via `__init__`. The same class is instantiated twice, once per page, with different arguments. This is the basic composition story. See [DAG composition](../concepts/dag-composition).
+- `ContentComponent` is its own class because content varies between pages. If you only ever had one page-level layout, you could inline its layout inside `MainPageComponent`: the class abstraction earns its keep when there's reuse.
+- Route aliasing: `'/': page_a_main_page` and `'/a': page_a_main_page` point to the same instance. Both URLs render the same component without `DuplicateIdError`.
+- This example uses the COSMO Bootstrap theme. Swap `dbc.themes.COSMO` for any other theme in the [DBC themes gallery](https://dash-bootstrap-components.opensource.faculty.ai/docs/themes/).
+
+## Try it locally
+
+```bash
+pip install "weaverlet[examples]"
+python dbc_multipage_app.py
+```
+
+## See also
+
+- [`SimpleRouterComponent`: concept](../routing/simple-router)
+- [DAG composition](../concepts/dag-composition)
+- [Example 13: DBC modal](./dbc-modal). Adds a signal-triggered modal to this pattern.

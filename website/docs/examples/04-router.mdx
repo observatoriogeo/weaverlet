@@ -1,0 +1,89 @@
+---
+title: "04: Router"
+sidebar_label: "04: Router"
+---
+
+# 04: Router
+
+> A two-page app using `SimpleRouterComponent`. Shows the routes-dict shape, the 404 fallback, the permissive `get_layout` signature, and aliasing (multiple paths mapping to the same component instance).
+
+## The script
+
+```python
+from weaverlet.base import WeaverletComponent, WeaverletApp
+from weaverlet.components import SimpleRouterComponent
+from dash import html
+
+
+class PageAComponent(WeaverletComponent):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def get_layout(self, pathname, hash, href, search):
+        return html.Div(f'hello from Page A!')
+
+
+class PageBComponent(WeaverletComponent):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def get_layout(self, pathname, hash, href, search):
+        return html.Div(f'hello from Page B!')
+
+
+class PageNotFoundComponent(WeaverletComponent):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def get_layout(self, pathname):
+        return html.Div(f'Page not found!')
+
+
+page_a_component = PageAComponent()
+page_b_component = PageBComponent()
+not_found_page_component = PageNotFoundComponent()
+
+routes = {
+    '/': page_a_component,
+    '/page_a': page_a_component,
+    '/page_b': page_b_component
+}
+router_component = SimpleRouterComponent(
+    routes=routes,
+    not_found_page_component=not_found_page_component
+)
+
+wapp = WeaverletApp(root_component=router_component)
+wapp.app.run(port=8089)
+```
+
+## Expected output
+
+- `http://localhost:8089/` → "hello from Page A!"
+- `/page_a` → "hello from Page A!" (same instance, aliased)
+- `/page_b` → "hello from Page B!"
+- Any other path → "Page not found!"
+
+## Notes
+
+- `routes` is a regular Python dict mapping paths to component instances. The router matches `pathname` against the keys.
+- `'/': page_a_component` and `'/page_a': page_a_component` both point to the same `PageAComponent` instance. That's aliasing. Multiple paths can share one canonical wrapper, both in default mode and under `keep_mounted=True`.
+- Routed components may declare any subset of `(pathname, hash, href, search)` in `get_layout`. `PageAComponent` and `PageBComponent` declare the full set; `PageNotFoundComponent` declares only `pathname`. The router introspects each signature and passes only matching kwargs.
+- `not_found_page_component` is required. No implicit fallback.
+- By default `keep_mounted=False`: each route mounts on entry, unmounts on exit. For state preservation across navigation, see [Example 14](./dmc-keep-mounted).
+
+## Try it locally
+
+```bash
+pip install weaverlet
+python router_app.py
+```
+
+## See also
+
+- [`SimpleRouterComponent`: concept](../routing/simple-router)
+- [`SimpleRouterComponent`: API reference](../api/simple-router)
+- [`keep_mounted`](../routing/keep-mounted). Preserve state across navigation.

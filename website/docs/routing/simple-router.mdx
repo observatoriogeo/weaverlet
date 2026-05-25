@@ -1,0 +1,122 @@
+---
+title: SimpleRouterComponent
+sidebar_label: SimpleRouter
+---
+
+# SimpleRouterComponent
+
+`SimpleRouterComponent` is Weaverlet's basic router: a dict of URL paths to component instances, plus a 404 fallback.
+
+```python
+from weaverlet import WeaverletComponent, WeaverletApp, SimpleRouterComponent
+from dash import html
+
+class HomePage(WeaverletComponent):
+    def get_layout(self):
+        return html.Div("Home")
+
+class AboutPage(WeaverletComponent):
+    def get_layout(self):
+        return html.Div("About")
+
+class NotFound(WeaverletComponent):
+    def get_layout(self, pathname):
+        return html.Div(f"Page {pathname} not found")
+
+router = SimpleRouterComponent(
+    routes={"/": HomePage(), "/about": AboutPage()},
+    not_found_page_component=NotFound(),
+)
+
+WeaverletApp(root_component=router).app.run()
+```
+
+That's the whole API surface. The router is itself a `WeaverletComponent`, so you typically make it the `root_component` of your app, or nest it inside a `Shell` component that owns a navbar, sidebar, etc.
+
+## The `routes` dict
+
+```python
+routes = {
+    "/": HomePage(),
+    "/about": AboutPage(),
+    "/about/team": TeamPage(),
+}
+```
+
+Keys are exact URL paths. The router matches `pathname` against the keys; unmatched paths fall through to `not_found_page_component`.
+
+### Aliasing. One instance, many paths
+
+```python
+home = HomePage()
+routes = {"/": home, "/home": home, "/index.html": home}
+```
+
+Three paths, one `HomePage` instance. Both `/` and `/home` render the same component object. Useful when you want canonical + alias URLs, or when migrating from a Pages-based app.
+
+Aliasing works in both `keep_mounted=False` (default) and `keep_mounted=True` modes. Under `keep_mounted=True` the router automatically uses a single shared wrapper for all aliased paths, so the same `Identifier()`-bearing layout never mounts twice.
+
+## The 404 component
+
+`not_found_page_component` is required. There's no implicit fallback. The 404 component is just another `WeaverletComponent`:
+
+```python
+class NotFound(WeaverletComponent):
+    def get_layout(self, pathname):
+        return html.Div(f"Page {pathname} not found")
+```
+
+Like all routed components, its `get_layout` may declare any subset of `(pathname, hash, href, search)`: the router introspects the signature and passes only what's declared.
+
+## Permissive `get_layout` signatures
+
+Routed pages can declare any of these kwargs in any order, or none of them:
+
+```python
+class A(WeaverletComponent):
+    def get_layout(self): ...                                       # no router args
+
+class B(WeaverletComponent):
+    def get_layout(self, pathname): ...                             # only pathname
+
+class C(WeaverletComponent):
+    def get_layout(self, pathname, hash, href, search): ...         # full set
+```
+
+The router inspects each `get_layout` signature at startup and passes only matching kwargs. You don't pay for kwargs you don't use, and you can grow the signature later without breaking other routes.
+
+## Prefixing
+
+When your app lives at a subpath (e.g. `https://example.com/myapp/`):
+
+```python
+router = SimpleRouterComponent(
+    routes={"/": HomePage(), "/about": AboutPage()},
+    not_found_page_component=NotFound(),
+    use_prefix=True,
+)
+
+WeaverletApp(
+    root_component=router,
+    context={"prefix": "/myapp"},
+).app.run()
+```
+
+- `use_prefix=True` tells the router to strip the prefix from incoming pathnames before matching.
+- The prefix value comes from the `prefix` key in the `context` dict passed to `WeaverletApp`. Both must agree.
+- The router will also prepend the prefix to any internal `dcc.Link` hrefs it generates.
+
+This is the standard way to mount a Weaverlet app under a subpath.
+
+## What about state across navigation?
+
+By default (`keep_mounted=False`), each route is mounted only when active. Navigating away unmounts the current page; navigating back creates a fresh instance. `n_clicks` resets, WebGL canvases get re-initialized, dropdown selections are lost.
+
+For state preservation across navigation, use `keep_mounted=True`. That's such a big topic it has its own page: [keep_mounted](./keep-mounted).
+
+## What to read next
+
+- [keep_mounted](./keep-mounted). Preserve state (including WebGL canvases) across navigation.
+- [`AuthRouterComponent`](./auth-router). When routes need login gating.
+- [Redirects](./redirects). Programmatic navigation from callbacks.
+- [`SimpleRouterComponent` API reference](../api/simple-router). Full signature.

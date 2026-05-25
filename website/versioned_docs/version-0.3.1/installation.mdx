@@ -1,0 +1,110 @@
+---
+title: Installation
+sidebar_label: Installation
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Installation
+
+## Requirements
+
+| | |
+|---|---|
+| Python | ≥ 3.12 |
+| Dash | ≥ 4.1.0, < 5.0.0 |
+| dash-extensions | ≥ 1.0.0, < 3.0.0 (1.x and 2.x both supported) |
+
+Weaverlet 0.3.x dropped support for Python < 3.12 and pre-Dash-4 environments. If you can't upgrade Python, pin to Weaverlet `0.2.x`.
+
+## Install from PyPI
+
+<Tabs groupId="package-manager">
+  <TabItem value="pip" label="pip" default>
+
+```bash
+pip install weaverlet
+```
+
+  </TabItem>
+  <TabItem value="uv" label="uv">
+
+```bash
+uv add weaverlet
+```
+
+  </TabItem>
+  <TabItem value="poetry" label="poetry">
+
+```bash
+poetry add weaverlet
+```
+
+  </TabItem>
+</Tabs>
+
+## Optional extras
+
+| Extra | Pulls in | Use when |
+|---|---|---|
+| `weaverlet[examples]` | `dash-bootstrap-components`, `dash-mantine-components` | Running the bundled examples 11-14 |
+| `weaverlet[dev]` | `pytest`, `pytest-playwright` | Hacking on Weaverlet itself |
+
+<Tabs groupId="package-manager">
+  <TabItem value="pip" label="pip" default>
+
+```bash
+pip install "weaverlet[examples]"
+pip install "weaverlet[dev]"
+```
+
+  </TabItem>
+  <TabItem value="uv" label="uv">
+
+```bash
+uv add "weaverlet[examples]"
+uv add "weaverlet[dev]"
+```
+
+  </TabItem>
+</Tabs>
+
+## Jupyter
+
+Dash 4 ships built-in Jupyter support. No extra needed. Construct your `WeaverletApp` normally and pass `jupyter_mode='inline'` (or `'tab'` / `'external'`) to `.app.run()`:
+
+```python
+from weaverlet import WeaverletApp, WeaverletComponent
+from dash import html
+
+class Root(WeaverletComponent):
+    def get_layout(self):
+        return html.Div("Hello from Jupyter!")
+
+wapp = WeaverletApp(root_component=Root())
+wapp.app.run(jupyter_mode='inline')
+```
+
+:::warning[Removed in 0.3.1]
+The `weaverlet[jupyter]` extra and the `WeaverletApp(jupyter_mode=True)` argument were both removed in 0.3.1. They were broken in 0.3.0 (Dash 4 has no `jupyter` extra, and the standalone `jupyter_dash` package was archived in 2022). Use the pattern above instead.
+:::
+
+## Verify the install
+
+```python
+import weaverlet
+print(weaverlet.__version__)
+```
+
+Expected:
+
+```
+0.3.1
+```
+
+## Where to go next
+
+- [Quickstart](./quickstart). The smallest runnable Weaverlet app.
+- [Your first Weaverlet app](./first-app). Walk through a multipage app from scratch.
+- [Examples gallery](./examples). 14 self-contained scripts.

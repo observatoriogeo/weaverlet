@@ -1,0 +1,86 @@
+---
+title: SignalTrigger
+sidebar_label: Trigger
+---
+
+# SignalTrigger
+
+`SignalTrigger(sig)` makes a callback fire when a signal is emitted, without receiving the payload.
+
+Use it when the consumer just needs to know *that* something happened. Not *what* happened.
+
+## The pattern
+
+```python
+from weaverlet import (
+    WeaverletComponent, WeaverletApp, Identifier,
+    SignalComponent, SignalOutput, SignalTrigger,
+)
+from dash_extensions.enrich import Output, Trigger
+from dash import html
+
+class TriggerDemo(WeaverletComponent):
+    btn_id = Identifier()
+    out_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.sig = SignalComponent()
+
+    def get_layout(self):
+        return html.Div([
+            self.sig(),
+            html.Button("Fire", id=self.btn_id),
+            html.P(id=self.out_id),
+        ])
+
+    def register_callbacks(self, app):
+        # Producer: return an empty dict — payload doesn't matter
+        @app.callback(SignalOutput(self.sig), Trigger(self.btn_id, "n_clicks"))
+        def fire():
+            return {}
+
+        # Consumer: SignalTrigger has no payload arg
+        @app.callback(Output(self.out_id, "children"), SignalTrigger(self.sig))
+        def show():
+            return "Signal triggered!"
+
+WeaverletApp(root_component=TriggerDemo()).app.run()
+```
+
+## Two things to notice
+
+### 1. The producer still returns a dict
+
+Even with `SignalTrigger`, the producer must return a dict. Typically `{}`. The signal's `dcc.Store` still has a `data` prop, and Dash callbacks must return *something*.
+
+### 2. The consumer takes no arguments
+
+This is the difference from `SignalInput`:
+
+| Consumer adapter | Signature |
+|---|---|
+| `SignalInput(sig)` | `def consume(payload): ...` |
+| `SignalTrigger(sig)` | `def consume(): ...` |
+
+If you import `Trigger` (from `dash_extensions.enrich`) and `SignalTrigger` (from `weaverlet`) in the same file, don't confuse them:
+- `Trigger(component_id, prop)`: turns any Dash prop into a no-payload input.
+- `SignalTrigger(signal)`: turns a signal into a no-payload input.
+
+`SignalTrigger(sig)` is exactly equivalent to `Trigger(sig.signal_id, sig.signal_attr)`.
+
+## When to prefer `SignalTrigger` over `SignalInput`
+
+| Use `SignalTrigger` when | Use `SignalInput` when |
+|---|---|
+| You're firing an event (modal open, toast show, refetch data) | The consumer needs the payload to update display or branch |
+| The producer returns `{}` consistently | The payload carries meaningful data |
+| You want a cleaner consumer signature (no unused `payload` arg) | You'd otherwise discard the payload arg anyway |
+
+If in doubt, default to `SignalInput`. The cost of an unused `payload` arg is small; the cost of refactoring to add payload later (and updating every consumer signature) is larger.
+
+## What to read next
+
+- [Input / Output](./input-output). When consumers do need the payload.
+- [Chains](./chains). Pipelines that mix triggers and payloads.
+- [Example 08: Signal trigger](../examples/signal-trigger). Minimal runnable example.

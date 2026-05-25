@@ -1,0 +1,103 @@
+---
+title: Signals overview
+sidebar_label: Overview
+---
+
+# Signals
+
+**Signals** are Weaverlet's typed event mechanism. They let two components (anywhere in the DAG) communicate without sharing a parent, without wiring a `dcc.Store` by hand, and without inventing a global event bus.
+
+A signal is a `SignalComponent` instance. One callback **emits** a payload to it; one or more other callbacks **listen** for emissions, either by reading the payload (`SignalInput`) or just by reacting to the edge (`SignalTrigger`).
+
+## Why not just `dcc.Store`?
+
+You *can* use `dcc.Store` for cross-component communication. The pattern is roughly:
+
+```python
+# Producer
+@app.callback(Output("shared-store", "data"), Input("button", "n_clicks"))
+def emit(n): return {"value": n}
+
+# Consumer
+@app.callback(Output("display", "children"), Input("shared-store", "data"))
+def show(data): return f"Got: {data}"
+```
+
+This works, but it leaves a footprint on your codebase:
+
+- The store's ID is a string both producer and consumer have to agree on.
+- Adding a second consumer means refactoring the producer (you can't have two outputs for one Input without `dash_extensions.enrich.group=`, which leaks framework choices into your "vanilla Dash" code).
+- The store is owned by whatever layout happens to render it. Typically the root, which forces upward references.
+
+A `SignalComponent` is just a `dcc.Store` underneath, but Weaverlet adds:
+
+- **Class ownership**: a signal is `self.sig = SignalComponent()`, declared and owned by the component that conceptually emits or coordinates it.
+- **Typed helpers**: `SignalOutput`, `SignalInput`, `SignalTrigger` produce correctly-typed Dash deps, with no string IDs to mismatch.
+- **Auto-wiring via `group=`**: multiple producers can write to the same signal without manual multi-output orchestration.
+
+## The five adapters
+
+A signal is paired with one of these adapters wherever you need to connect it to a callback:
+
+| Intent | Adapter | Returns | Used in callback decorator |
+|---|---|---|---|
+| Emit payload | `SignalOutput(sig)` | `Output` | `@app.callback(SignalOutput(sig), ...)`: return a dict |
+| Receive payload | `SignalInput(sig)` | `Input` | `@app.callback(..., SignalInput(sig))`: payload is a function arg |
+| React to edge only | `SignalTrigger(sig)` | `Trigger` | `@app.callback(..., SignalTrigger(sig))`: no payload arg |
+| Read as State | `SignalState(sig)` | `State` | `@app.callback(..., SignalState(sig))`: payload is a function arg, no trigger |
+| Server-side cache | `ServersideSignalOutput(sig)` | `Output` | `@app.callback(ServersideSignalOutput(sig), ...)`: wrap return with `Serverside(...)` |
+
+There's also `SignalGroup(sig)` for advanced multi-output scenarios. See the [API reference](../api/signal-adapters).
+
+## The minimal pattern
+
+```python
+from weaverlet import (
+    WeaverletComponent, WeaverletApp, Identifier,
+    SignalComponent, SignalOutput, SignalInput,
+)
+from dash_extensions.enrich import Input, Output
+from dash import html
+
+class Demo(WeaverletComponent):
+    btn_id = Identifier()
+    out_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.sig = SignalComponent()
+
+    def get_layout(self):
+        return html.Div([
+            self.sig(),
+            html.Button("Click me", id=self.btn_id),
+            html.P(id=self.out_id),
+        ])
+
+    def register_callbacks(self, app):
+        # Producer
+        @app.callback(SignalOutput(self.sig), Input(self.btn_id, "n_clicks"))
+        def emit(n_clicks):
+            return {"clicks": n_clicks}
+
+        # Consumer
+        @app.callback(Output(self.out_id, "children"), SignalInput(self.sig))
+        def show(payload):
+            return f"Payload: {payload}"
+
+WeaverletApp(root_component=Demo()).app.run()
+```
+
+Note three things:
+
+1. `self.sig()` is rendered in the layout. `SignalComponent.get_layout()` returns the underlying `dcc.Store`. Without it, the store wouldn't exist in the DOM and the callbacks would fail.
+2. The producer returns a **dict**. Always a dict, even if empty. See [Trigger](./trigger).
+3. Both callbacks live in the same component because the same component *owns* the signal. If a different component wants to listen, you'd pass `self.sig` to it (or pass it the wrapped `SignalInput(self.sig)`).
+
+## Where to go next
+
+- [Input / Output](./input-output). Full producer/consumer semantics.
+- [Trigger](./trigger). Payload-less signals.
+- [Chains](./chains). Pipeline of signals.
+- [`StoreComponent`](./store-component). When you need persistent shared state, not just events.
+- [Serverside signals](./serverside). Caching large payloads on the server.

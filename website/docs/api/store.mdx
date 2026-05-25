@@ -1,0 +1,174 @@
+---
+title: StoreComponent
+sidebar_label: StoreComponent
+---
+
+# `StoreComponent` and `StoreComponentOp`
+
+Shared, mutable, app-wide state with explicit STORE / MERGE / CLEAN operations. Where a `SignalComponent` is a transient event bus, a `StoreComponent` is persistent state that callbacks read and write through op-dicts.
+
+```python
+from weaverlet import StoreComponent, StoreComponentOp
+```
+
+## `StoreComponentOp`: operation constants
+
+```python
+class StoreComponentOp:
+    STORE = 'store'
+    MERGE = 'merge'
+    CLEAN = 'clean'
+```
+
+Use these constants when constructing op-dicts so typos surface at import time, not at runtime.
+
+## `StoreComponent` signature
+
+```python
+class StoreComponent(WeaverletComponent):
+
+    store_attr: str = 'data'
+    store_id = Identifier()
+    _store_group_id = Identifier()
+
+    def __init__(self, name: str = "unnamed") -> None:
+        # Internal signals (don't reference externally):
+        self._clean_signal = SignalComponent(name='clean_signal')
+        self._store_signal = SignalComponent(name='store_signal')
+        self._merge_signal = SignalComponent(name='merge_signal')
+        # External input — emit op-dicts here:
+        self.input_signal = SignalComponent(name='input_signal')
+
+    def get_layout(self) -> "dash.html.Div": ...
+    def register_callbacks(self, app) -> None: ...
+```
+
+## Public attributes
+
+| Attribute | Type | Description |
+|---|---|---|
+| `store_id` | `Identifier` | The underlying `dcc.Store`'s element ID. Read via `Input(store_id, store_attr)` or `SignalInput(store)`. |
+| `store_attr` | `str` (`'data'`) | The property on the store. |
+| `input_signal` | `SignalComponent` | Write to the store by emitting an op-dict to this signal. |
+
+The other `_signal` attributes are internal. Don't reference them externally.
+
+## Op-dicts
+
+Emit one of these to `SignalOutput(store.input_signal)`:
+
+```python
+{"op": StoreComponentOp.STORE, "data": {...}}    # overwrite the entire store value
+{"op": StoreComponentOp.MERGE, "data": {...}}    # shallow-merge dict into the store
+{"op": StoreComponentOp.CLEAN}                    # reset the store to {}
+```
+
+The `CLEAN` op doesn't take a `data` key; the store is reset to `{}`.
+
+Anything else (an unknown `op` value, or a missing `op` key) raises `WeaverletException` from the dispatch callback.
+
+## Usage
+
+```python
+from weaverlet import (
+    WeaverletComponent, WeaverletApp, Identifier,
+    StoreComponent, StoreComponentOp,
+    SignalOutput,
+)
+from dash_extensions.enrich import Input, Output
+from dash import html
+
+
+class App(WeaverletComponent):
+    set_btn = Identifier()
+    merge_btn = Identifier()
+    clean_btn = Identifier()
+    display_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.store = StoreComponent()
+
+    def get_layout(self):
+        return html.Div([
+            self.store(),
+            html.Button("Set theme=dark", id=self.set_btn),
+            html.Button("Merge user=Alice", id=self.merge_btn),
+            html.Button("Clean", id=self.clean_btn),
+            html.Pre(id=self.display_id),
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(SignalOutput(self.store.input_signal),
+                      Input(self.set_btn, "n_clicks"), prevent_initial_call=True)
+        def set_theme(_):
+            return {"op": StoreComponentOp.STORE, "data": {"theme": "dark"}}
+
+        @app.callback(SignalOutput(self.store.input_signal),
+                      Input(self.merge_btn, "n_clicks"), prevent_initial_call=True)
+        def merge_user(_):
+            return {"op": StoreComponentOp.MERGE, "data": {"user": "Alice"}}
+
+        @app.callback(SignalOutput(self.store.input_signal),
+                      Input(self.clean_btn, "n_clicks"), prevent_initial_call=True)
+        def clean(_):
+            return {"op": StoreComponentOp.CLEAN}
+
+        @app.callback(Output(self.display_id, "children"),
+                      Input(self.store.store_id, "data"))
+        def show(state):
+            return f"Store: {state}"
+
+
+WeaverletApp(root_component=App()).app.run()
+```
+
+## How the multi-writer pattern works
+
+Stock Dash rejects multiple callbacks targeting the same `Output`. `StoreComponent` works around this two ways:
+
+1. **External writers emit to `input_signal`**: a `SignalComponent` that the store owns. Any number of external callbacks can target the same `SignalOutput(input_signal)` because `WeaverletApp.app` is a `DashProxy` with `group=` multi-output multiplexing.
+
+2. **Internal dispatch**: a single callback in `register_callbacks` listens to `input_signal` and routes the op-dict to one of three internal signals (`_store_signal`, `_merge_signal`, `_clean_signal`).
+
+3. **Three internal writers**: `_store_signal`, `_merge_signal`, `_clean_signal` each have a callback that updates `Output(store_id, "data")`. All three share the same `group=self._store_group_id`, so the `DashProxy` multiplexer lets them coexist.
+
+This indirection is invisible to you. Just emit op-dicts to `input_signal` and read `store_id`.
+
+## Pitfalls
+
+:::warning[Don't reference the internal signals]
+`_clean_signal`, `_store_signal`, `_merge_signal` are implementation details. Wire your writers to `input_signal` only.
+:::
+
+:::warning[Op dispatch raises on unknown ops]
+If you emit `{"op": "foo"}` or an op-dict without `op`, the dispatch callback raises `WeaverletException`. Always use the `StoreComponentOp` constants:
+
+```python
+return {"op": StoreComponentOp.MERGE, "data": {...}}    # correct
+return {"op": "merge", "data": {...}}                    # works but typo-prone
+```
+:::
+
+:::warning[`MERGE` is a shallow merge]
+Nested dicts are replaced, not deep-merged:
+
+```python
+# initial:  {"settings": {"theme": "dark", "size": "lg"}}
+# merge:    {"data": {"settings": {"theme": "light"}}}
+# result:   {"settings": {"theme": "light"}}    # size is gone!
+```
+
+If you need deep merge semantics, do the merge yourself before emitting, or use the `STORE` op with the full new state.
+:::
+
+:::warning[Render `self.store()` exactly once]
+The `StoreComponent` carries multiple internal `Identifier()`s. Two renders → `DuplicateIdError`.
+:::
+
+## See also
+
+- [Signals. Concept](../signals/overview)
+- [`StoreComponent`: concept](../signals/store-component)
+- [`SignalComponent`](./signal)
+- [Signal adapters](./signal-adapters)

@@ -1,0 +1,80 @@
+---
+title: For LLM coding assistants
+sidebar_label: For LLM coding assistants
+description: How to use Weaverlet's ReadMe.LLM.md and llms.txt from inside your favorite AI coding assistant.
+---
+
+# For LLM coding assistants
+
+Weaverlet ships first-class context files for AI coding assistants. If you're writing Weaverlet code with help from Claude, GPT, Codex, Cursor, or Aider, point your assistant at the resources below and it will produce idiomatic Weaverlet code instead of guessing.
+
+## What's available
+
+| File | Purpose | Convention |
+|---|---|---|
+| [`ReadMe.LLM.md`](https://github.com/observatoriogeo/weaverlet/blob/main/ReadMe.LLM.md) | Full LLM-targeted context: framework rules, mental model, 14 worked examples, API signatures, common patterns. | [ReadMe.LLM](https://readmellm.github.io/) |
+| [`llms.txt`](https://github.com/observatoriogeo/weaverlet/blob/main/llms.txt) | Short index that points at `ReadMe.LLM.md` plus the canonical docs. Designed for auto-discovery. | [llmstxt.org](https://llmstxt.org/) |
+
+Both live at the root of the [`observatoriogeo/weaverlet`](https://github.com/observatoriogeo/weaverlet) repo. The docs you're reading now are the human-targeted long form of the same material; the LLM files are a compressed version optimized for being pasted (or fetched) into an assistant's prompt.
+
+## CDN URLs for `ReadMe.LLM.md`
+
+The repo file works directly, but the GitHub raw URL has rate limits and a CORS profile that some assistants choke on. The jsDelivr mirror is the recommended fetch target:
+
+```
+# Latest (tracks main, updated as Weaverlet evolves):
+https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/ReadMe.LLM.md
+
+# Pinned to v0.3.0 (stable, won't shift under your assistant):
+https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@v0.3.0/ReadMe.LLM.md
+```
+
+Use the pinned URL when you want reproducible assistant behavior across runs. Use the `@main` URL when you want the assistant to track the project as it ships new features.
+
+## Drop-in prompts
+
+Paste one of these at the start of your conversation, before describing the task you want help with.
+
+### Claude (claude.ai, Claude Code, API)
+
+```
+Before answering, fetch and read:
+https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/ReadMe.LLM.md
+
+That document is the canonical reference for Weaverlet. Follow its rules
+and patterns when writing code.
+```
+
+Claude Code can also auto-discover `llms.txt` if you point it at the repo or include the URL in `CLAUDE.md`.
+
+### GPT / ChatGPT / Codex
+
+```
+For this conversation, the authoritative reference for Weaverlet is:
+https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/ReadMe.LLM.md
+
+Fetch it (if you have browsing) or assume its content when writing
+Weaverlet code. Follow the rules and patterns it documents.
+```
+
+### Cursor / Continue / other IDE assistants
+
+Add the CDN URL to your project's docs configuration so the assistant fetches it on each session. Cursor's `@Docs` feature, for example, accepts the URL directly.
+
+## llms.txt auto-discovery
+
+Tools that follow the [llmstxt.org](https://llmstxt.org/) convention look for `/llms.txt` at the root of a project to discover its LLM-targeted resources. Weaverlet's `llms.txt` lists `ReadMe.LLM.md` plus the canonical docs entry points so any conforming assistant gets the right context with zero configuration.
+
+If you maintain a project that depends on Weaverlet, you can do the same: drop your own `llms.txt` at your project root that links back to ours.
+
+## What's in `ReadMe.LLM.md`
+
+The file is organized for an assistant to skim once and then refer back to as needed:
+
+- **Rules**: hard constraints (e.g. *never use string IDs, always use `Identifier()` descriptors*; *callbacks use `dash_extensions.enrich`, not `dash.dependencies`*).
+- **Mental model**: the DAG-of-components view, the wiring lifecycle, and how `WeaverletApp` walks the tree.
+- **14 worked examples**: the same gallery as the [Examples](./examples) section, but condensed into copy-pasteable scripts with framing comments aimed at an LLM.
+- **API signatures**: every public class and helper with its constructor signature and the most-common usage shape.
+- **Patterns**: idioms the framework expects (constructor-injected state, signal-based events, `keep_mounted` for WebGL preservation, `AuthRouterComponent` for session-gated routes).
+
+Together that's enough context for an assistant to produce code that compiles against current Weaverlet without hallucinating the API surface.

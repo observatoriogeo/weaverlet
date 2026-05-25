@@ -1,0 +1,129 @@
+---
+title: keep_mounted. State-preserving routing
+sidebar_label: keep_mounted
+---
+
+# `keep_mounted`: state-preserving routing
+
+`keep_mounted` is the v0.3 hero feature: with one kwarg, every route stays mounted in the DOM across navigation, and the router toggles CSS visibility instead of unmounting/remounting.
+
+The result: **`n_clicks` survives navigation. Dropdown selections survive. Scroll position survives. WebGL canvases (dash-leaflet maps, dash-sylvereye graphs, Plotly WebGL plots) keep their state, their zoom level, their selected nodes.** This is what makes Weaverlet a credible framework for visualization-heavy dashboards.
+
+## The setup
+
+```python
+from weaverlet import WeaverletComponent, WeaverletApp, SimpleRouterComponent
+from dash import html
+
+router = SimpleRouterComponent(
+    routes={"/": HomePage(), "/map": MapPage(), "/about": AboutPage()},
+    not_found_page_component=NotFound(),
+    keep_mounted=True,        # ← the magic
+    preserve_path="/map",      # ← the route whose state matters most (default: first)
+)
+WeaverletApp(root_component=router).app.run()
+```
+
+That's it. Every route is rendered once at app startup; navigation toggles `style.display` (or `style.visibility`: see below) on per-route wrappers.
+
+## How it works
+
+| Mode | Behavior |
+|---|---|
+| `keep_mounted=False` (default) | The router's content `<div>` has its `children` replaced on every navigation. Components mount on entry, unmount on exit. |
+| `keep_mounted=True` | Every route's layout is rendered into its own wrapper `<div>` at startup. Navigation only toggles `style` per wrapper. Components never unmount. |
+
+This is the standard React trick for state preservation, applied to Dash routes. Once a component is mounted, its React state (including `n_clicks`, controlled inputs, `useState` analogs in any custom React components) lives across re-renders. Toggling CSS keeps that state intact; replacing `children` discards it.
+
+## `display:none` vs `visibility:hidden`
+
+Most hidden routes get `display: none`. That's lighter. The browser skips layout for them.
+
+But `display: none` causes problems for some libraries. WebGL canvases (Three.js, PixiJS-backed components like `dash-sylvereye`, certain `dash-leaflet` builds) detect the dimensionless layout and re-initialize on the next show, defeating the state preservation.
+
+To handle this, **one** route (the `preserve_path` route) gets `visibility: hidden` when inactive instead. That keeps the canvas dimensioned and the WebGL context alive.
+
+```python
+router = SimpleRouterComponent(
+    routes={"/": MapPage(), "/about": AboutPage()},
+    not_found_page_component=NotFound(),
+    keep_mounted=True,
+    preserve_path="/",        # the map's route — its canvas must survive
+)
+```
+
+Default is the first route in `routes`. Pick the route whose component is the most state-sensitive (typically the WebGL-heaviest one).
+
+:::warning[Only one route gets `visibility:hidden`]
+The visual cost of `visibility: hidden` is "an empty rectangle of the right size, not painted." For a full-page map that's fine. For multiple full-page WebGL pages it adds up. The framework picks one (`preserve_path`); others use `display: none`. If you need *all* routes to survive WebGL re-init, restructure so the WebGL component lives in a shared layout layer (e.g. a `Shell` that owns the map and switches sub-content), not in per-route components.
+:::
+
+## Aliasing under `keep_mounted=True`
+
+Multiple paths can map to the same component instance:
+
+```python
+home = HomePage()
+routes = {"/": home, "/home": home}      # both render the same HomePage
+```
+
+The router detects this and uses one canonical wrapper for both paths. The "canonical" path is the first one encountered for the instance. If you set `preserve_path` to an aliased path, the router normalizes it to the canonical one.
+
+Aliasing previously caused `DuplicateIdError` in pre-0.3 Weaverlet; that's fixed.
+
+## Dynamic 404
+
+When `keep_mounted=True` and the URL doesn't match any route, the not-found page's children are re-rendered with the live `pathname`. So this works as you'd expect:
+
+```python
+class NotFound(WeaverletComponent):
+    def get_layout(self, pathname):
+        return html.Div(f"Page {pathname} not found")
+```
+
+Without dynamic 404, the not-found wrapper would render once at startup with `pathname=""` and display `"Page  not found"` forever. The framework re-renders the wrapper's children on each unmatched-path change to keep this template usable.
+
+There's one edge case: if `not_found_page_component` is the **same instance** as one of the routes (e.g. "404 falls back to home"), the router reuses that route's wrapper instead of mounting a separate one. Dynamic 404 re-rendering is skipped in that case because the matched route's wrapper handles display.
+
+## When to use it
+
+### Yes
+- Pages with `dash-leaflet` maps, `dash-sylvereye` graphs, Plotly WebGL backends.
+- Per-page `n_clicks`, dropdown selections, scroll positions must persist.
+- Expensive component initialization (model loading, large data fetching at mount).
+
+### No
+- Heavy pages where you genuinely want only one in memory at a time.
+- Apps with many routes (10+) where the up-front mount cost dominates.
+- Routes that take URL parameters and re-fetch on every visit anyway.
+
+If in doubt, start with `keep_mounted=False`. Switch to `keep_mounted=True` the first time you notice a counter resetting or a map zoom getting lost.
+
+## Common pitfalls
+
+### "My state still resets!"
+
+Check that you're not putting state into the URL or into a `dcc.Store` that gets cleared on navigation. `keep_mounted=True` only preserves *component* state. If your "state" is a `dcc.Store` whose value comes from a callback that runs on every page change, it'll still re-run.
+
+### "I get a `DuplicateIdError` on the route I'm `preserve_path`-ing"
+
+You probably aliased two `routes` keys to the same instance pre-0.3. That's now allowed. Make sure you're on Weaverlet ≥ 0.3.0.
+
+If you genuinely have two routes wanting the same component class (not the same *instance*), instantiate twice:
+
+```python
+routes = {"/": HomePage(), "/home": HomePage()}    # two instances — both fine
+# vs
+home = HomePage()
+routes = {"/": home, "/home": home}                # one instance, shared
+```
+
+### "Callbacks fire for hidden routes"
+
+Yes, they do. That's the point. Every mounted component's callbacks are live. If you have a "fetch on page load" callback you only want firing for the active page, gate it on `Input(self.router.url_id, "pathname")` and check the path inside the callback body.
+
+## What to read next
+
+- [`SimpleRouterComponent`](./simple-router). The basic router.
+- [`AuthRouterComponent`](./auth-router). Adds the same `keep_mounted` story for auth-gated routes.
+- [Example 14: DMC + keep_mounted](../examples/dmc-keep-mounted). A full runnable demo.

@@ -1,0 +1,131 @@
+---
+title: Reference
+sidebar_label: Overview
+---
+
+# Reference
+
+Every public symbol in Weaverlet 0.3.1. Pages are organized by module; signatures are extracted from the actual source so they're guaranteed accurate.
+
+## Importing
+
+The entire public API is re-exported from the top-level `weaverlet` package:
+
+```python
+from weaverlet import (
+    # Core
+    WeaverletComponent, WeaverletApp, Identifier,
+    # Routing
+    SimpleRouterComponent, AuthRouterComponent, RedirectComponent,
+    # Signals
+    SignalComponent, DivSignalComponent, StoreComponent, StoreComponentOp,
+    SignalInput, SignalOutput, SignalTrigger, SignalState, SignalGroup,
+    ServersideSignalOutput, Serverside,
+    # Utilities
+    EmptyLayoutComponent, RouterComponent,
+    ComponentsDict, ComponentsList, ComponentsOrderedDict,
+    DetachedComponentRef,
+    # Exceptions
+    WeaverletException,
+)
+```
+
+The legacy submodule paths (`weaverlet.base`, `weaverlet.components`) still work; the names below are also importable from them.
+
+```python
+__version__: str  # = "0.3.1"
+```
+
+## By topic
+
+### Core
+
+- [`WeaverletComponent`](./weaverlet-component). The abstract base class for every UI block.
+- [`WeaverletApp`](./weaverlet-app). The orchestrator that walks the DAG and produces a Dash app.
+- [`Identifier`](./identifier). Descriptor that yields unique Dash IDs per instance.
+
+### Routing
+
+- [`SimpleRouterComponent`](./simple-router). Basic path-based routing with optional `keep_mounted`.
+- [`AuthRouterComponent`](./auth-router). Session-protected routing.
+- [`RedirectComponent`](./redirect). Client-side navigation primitive.
+
+### Signals
+
+- [`SignalComponent`](./signal). The typed event bus.
+- [`DivSignalComponent`](./div-signal). `SignalComponent` variant backed by an `html.Div`.
+- [`StoreComponent`](./store). Shared mutable state with explicit STORE/MERGE/CLEAN ops.
+- [Signal adapters](./signal-adapters). `SignalInput`, `SignalOutput`, `SignalTrigger`, `SignalState`, `SignalGroup`, `ServersideSignalOutput`, `Serverside`.
+
+### Utilities
+
+- [`EmptyLayoutComponent`](./empty-layout). Minimal layout placeholder.
+- [`DetachedComponentRef`](./detached-ref). Cycle-breaking reference wrapper.
+- [`RouterComponent`](#routercomponent). Marker base class for routers.
+- [Component collection ABCs](#component-collection-abcs). `ComponentsDict`, `ComponentsList`, `ComponentsOrderedDict`.
+
+### Exceptions
+
+- [`WeaverletException`](./exceptions). Base exception for all Weaverlet-raised errors.
+
+## Marker classes and ABCs
+
+### `RouterComponent`
+
+```python
+class RouterComponent(WeaverletComponent):
+    """Marker base class — subclasses are routers."""
+    def __init__(self, name: str = "unnamed") -> None: ...
+```
+
+Used by Weaverlet internally for `isinstance` checks. Subclass it when you build a custom router (so other code can identify routers regardless of which subclass they are). Both [`SimpleRouterComponent`](./simple-router) and [`AuthRouterComponent`](./auth-router) extend it.
+
+### Component collection ABCs
+
+When your component owns a *collection* of children (a dict of pages, a list of widgets), wrap them in one of the three collection ABCs so the DAG walker can find them via `get_components()`:
+
+```python
+class ComponentsDict(dict, ABC):
+    @abstractmethod
+    def get_components(self): ...
+
+class ComponentsList(list, ABC):
+    @abstractmethod
+    def get_components(self): ...
+
+class ComponentsOrderedDict(OrderedDict, ABC):
+    @abstractmethod
+    def get_components(self): ...
+```
+
+Each subclass must implement `get_components()` returning an iterable of `WeaverletComponent` instances. Both `SimpleRouterComponent` and `AuthRouterComponent` internally use `ComponentsDict` subclasses (`SimpleRoutes` and `AuthRoutes`) for their `routes` dicts.
+
+Example. A list of tab pages exposed to the DAG walker:
+
+```python
+from weaverlet import WeaverletComponent, ComponentsList
+
+class TabsList(ComponentsList):
+    def get_components(self):
+        return list(self)
+
+class TabsBar(WeaverletComponent):
+    def __init__(self):
+        super().__init__()
+        self.tabs = TabsList([HomeTab(), AboutTab(), SettingsTab()])
+
+    def get_layout(self):
+        return html.Div([tab() for tab in self.tabs])
+```
+
+## Constants
+
+- `DEFAULT_COMPONENT_NAME: str = "unnamed"`: the default value of the `name=` kwarg on every component.
+
+## Source
+
+Reading the actual source is sometimes the fastest way to understand a corner case. The relevant files live at:
+
+- [`weaverlet/__init__.py`](https://github.com/observatoriogeo/weaverlet/blob/main/weaverlet/__init__.py). Re-export surface, version.
+- [`weaverlet/base.py`](https://github.com/observatoriogeo/weaverlet/blob/main/weaverlet/base.py). `WeaverletComponent`, `WeaverletApp`, `Identifier`, signal adapters.
+- [`weaverlet/components/`](https://github.com/observatoriogeo/weaverlet/tree/main/weaverlet/components). Routers, signals, store, redirect, empty layout.

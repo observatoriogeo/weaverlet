@@ -1,0 +1,151 @@
+---
+title: WeaverletApp
+sidebar_label: WeaverletApp
+---
+
+# `WeaverletApp`
+
+The orchestrator. Takes a root component, walks the DAG, registers callbacks, and produces a Dash app.
+
+```python
+from weaverlet import WeaverletApp
+```
+
+## Signature
+
+```python
+class WeaverletApp:
+    def __init__(
+        self,
+        root_component: WeaverletComponent,
+        context: dict | None = None,
+        title: str | None = None,
+        external_stylesheets: list | None = None,
+        suppress_callback_exceptions: bool = True,
+        prevent_initial_callbacks: bool = True,
+        assets_folder: str | None = None,
+        jupyter_mode: bool = False,
+        **dash_kwargs,
+    ) -> None: ...
+```
+
+## Parameters
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `root_component` | `WeaverletComponent` | **required** | The top of the component DAG. Typically a router, a shell, or a single page. |
+| `context` | `dict` or `None` | `None` (becomes `{}`) | Shared dict propagated to every component via `self.get_context()`. See [Context](../concepts/context). |
+| `title` | `str` or `None` | `None` | Browser tab title. Passed through to `DashProxy`. |
+| `external_stylesheets` | `list` or `None` | `None` | URLs / theme objects (e.g. `dbc.themes.COSMO`). Passed through to `DashProxy`. |
+| `suppress_callback_exceptions` | `bool` | `True` | Suppress "ID not found in layout" errors at callback registration. Almost always wanted. Weaverlet renders some layouts conditionally. |
+| `prevent_initial_callbacks` | `bool` | `True` | Prevent callbacks from firing on initial load. Equivalent to the Dash kwarg. |
+| `assets_folder` | `str` or `None` | auto-resolved | Path to the assets folder. See [Assets folder auto-resolution](#assets-folder-auto-resolution). |
+| `jupyter_mode` | `bool` | `False` | **Removed in 0.3.1.** Passing `True` raises `TypeError` with a migration message. Pass `jupyter_mode=` to `wapp.app.run()` instead. |
+| `**dash_kwargs` | | | Any other Dash kwarg flows through to the `DashProxy` constructor. |
+
+## Attributes after construction
+
+| Attribute | Type | Description |
+|---|---|---|
+| `app` | `dash_extensions.enrich.DashProxy` | The underlying Dash app. Use `wapp.app.run(...)`, `wapp.app.server`, etc. |
+| `root_component` | `WeaverletComponent` | The root you passed in. |
+| `root` | `WeaverletComponent` | Alias for `root_component`. |
+| `context` | `dict` | The context dict (always a dict; `None` is normalized to `{}`). |
+
+## What `__init__` does, in order
+
+1. Stores `root_component`, `context`, sets `root` alias.
+2. Auto-resolves `assets_folder` if not provided (see below).
+3. Constructs `self.app = DashProxy(__name__, ...)` with the kwargs above and any extra `dash_kwargs`.
+4. Re-dumps any `dash_extensions.javascript.assign()` namespace into the resolved `assets_folder` (avoids "No match for function0" errors when CWD differs from the script directory).
+5. DAG walk #1: for every reachable `WeaverletComponent`, set its `_wlt_context = self.context`, then call `initialize()`.
+6. Sets `self.app.layout` by calling `root_component.get_layout()` with placeholder values for any router-style kwargs the signature declares without defaults.
+7. DAG walk #2: calls `register_callbacks(self.app)` on every component.
+
+## Running the app
+
+### Local
+
+```python
+wapp = WeaverletApp(root_component=root, title="My App")
+wapp.app.run(port=8050, debug=True)
+```
+
+:::warning[`app.run_server(...)` is gone]
+Dash 4 removed `app.run_server`. Use `app.run(...)`. If you're porting code from a pre-0.3 Weaverlet codebase, this is the most common breaking change.
+:::
+
+### Jupyter
+
+Dash 4 absorbed Jupyter support into core. Construct `WeaverletApp` normally and pass `jupyter_mode` to `app.run`:
+
+```python
+wapp = WeaverletApp(root_component=root)
+wapp.app.run(jupyter_mode="inline")    # or "tab" or "external"
+```
+
+No extras needed. Don't pass `jupyter_mode=True` to `WeaverletApp(...)`: it raises `TypeError` in 0.3.1 with a migration message.
+
+### Production (WSGI)
+
+```python
+# app.py
+from weaverlet import WeaverletApp, WeaverletComponent
+from dash import html
+
+class Root(WeaverletComponent):
+    def get_layout(self):
+        return html.Div("Hello")
+
+application = WeaverletApp(root_component=Root()).app.server
+```
+
+Run with `gunicorn` (or `uwsgi`):
+
+```bash
+gunicorn app:application -w 2 -b 0.0.0.0:8080
+```
+
+## Assets folder auto-resolution
+
+If you don't pass `assets_folder`, `WeaverletApp` resolves it to `dirname(sys.modules['__main__'].__file__) + "/assets"`. If `__main__` has no `__file__` (e.g. interactive interpreter), it falls back to `os.path.abspath("assets")`.
+
+This matters for libraries that write JavaScript files into `assets/` at runtime. Most notably `dash_extensions.javascript.assign()`, which defaults to a CWD-relative path. Without the auto-resolution, running your app from an IDE, `uv run`, or a test runner where CWD differs from the script's directory would cause `dash-leaflet` style handlers (and similar) to fail with "No match for function0".
+
+Override explicitly when needed:
+
+```python
+wapp = WeaverletApp(root_component=root, assets_folder="/path/to/assets")
+```
+
+## Why `DashProxy`?
+
+`WeaverletApp.app` is a `dash_extensions.enrich.DashProxy`, not a plain `dash.Dash`. This is what unlocks:
+
+- `group=` multi-output callbacks. Multiple writers to the same `Output` (used by `StoreComponent`).
+- `Serverside(...)` return-value wrappers for server-side caching.
+- `dash_extensions.javascript.assign()` for inline client-side JS hooks.
+- Backwards-compat with stock Dash APIs (`Input`, `Output`, etc., all still work).
+
+You don't have to know any of this. `WeaverletApp` configures the proxy with sensible defaults. But when stack traces mention `DashProxy`, that's why.
+
+## Pitfalls
+
+:::warning[`prevent_initial_callbacks=True` is the default]
+Every callback registered through `WeaverletApp.app` has its initial-call behavior suppressed by default. If you *need* a callback to fire on page load, decorate it with `prevent_initial_call=False` explicitly:
+
+```python
+@app.callback(Output(...), Input(...), prevent_initial_call=False)
+def fire_on_load(...): ...
+```
+:::
+
+:::warning[Don't construct `dash.Dash()` separately]
+The DAG walker assumes Weaverlet owns the app. Building a `dash.Dash` yourself and trying to mix it in won't work. Pass everything through `root_component` and let `WeaverletApp` orchestrate.
+:::
+
+## See also
+
+- [App lifecycle. Concept](../concepts/app-lifecycle)
+- [Context. Concept](../concepts/context)
+- [`WeaverletComponent`](./weaverlet-component)

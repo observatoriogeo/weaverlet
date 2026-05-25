@@ -1,0 +1,122 @@
+---
+title: Redirects
+sidebar_label: Redirects
+---
+
+# Redirects
+
+`RedirectComponent` is Weaverlet's client-side navigation primitive. Render one in a layout, then return a navigation dict to it from a callback to navigate the browser.
+
+```python
+from weaverlet import WeaverletComponent, WeaverletApp, Identifier, RedirectComponent
+from dash_extensions.enrich import Output, Trigger
+from dash import html
+
+
+class Redirector(WeaverletComponent):
+    btn_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.redirect = RedirectComponent()
+
+    def get_layout(self):
+        return html.Div([
+            self.redirect(),
+            html.Button("Go to /target", id=self.btn_id),
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(
+            Output(self.redirect.href_id, self.redirect.href_attr),
+            Trigger(self.btn_id, "n_clicks"),
+        )
+        def go():
+            return {"url": "/target", "target": "_self"}
+
+
+WeaverletApp(root_component=Redirector()).app.run()
+```
+
+Click the button: the browser navigates to `/target`.
+
+## The redirect dict
+
+```python
+{"url": "/target", "target": "_self"}
+```
+
+| Key | Required | Values |
+|---|---|---|
+| `url` | Yes | Absolute or relative URL |
+| `target` | Yes | `"_self"`, `"_blank"`, or any HTML target value |
+
+`_self` navigates the current tab (replacing the current page); `_blank` opens a new tab.
+
+## Why a component instead of `dcc.Location`?
+
+`dcc.Location` (Dash's built-in URL primitive) does the same thing but with a less friendly API: you write to `location.href` and the browser navigates. `RedirectComponent` wraps that pattern in a Weaverlet component with two improvements:
+
+1. **It's a class-level construct**: declare it as `self.redirect = RedirectComponent()` in `__init__`, use `self.redirect.href_id` and `self.redirect.href_attr` in your callbacks. No string IDs to mismatch.
+2. **It supports `use_prefix=True`**: when your app deploys under a subpath, the redirect can transparently prepend the prefix on the client side.
+
+## Prefixing
+
+```python
+self.redirect = RedirectComponent(use_prefix=True)
+```
+
+Combined with `WeaverletApp(context={"prefix": "/myapp"})`, a redirect to `/target` becomes a browser navigation to `/myapp/target`. The clientside callback handles the prefix injection. No Python-side string concatenation needed.
+
+This is the same context key that `SimpleRouterComponent(use_prefix=True)` consumes. See [Context](../concepts/context).
+
+## Common patterns
+
+### Redirect after successful action
+
+```python
+@app.callback(
+    Output(self.redirect.href_id, self.redirect.href_attr),
+    Input(self.submit_btn, "n_clicks"),
+    State(self.form_id, "value"),
+    prevent_initial_call=True,
+)
+def save_and_go(_, value):
+    save_to_db(value)
+    return {"url": "/dashboard", "target": "_self"}
+```
+
+### Redirect to an external site
+
+```python
+return {"url": "https://docs.example.com", "target": "_blank"}
+```
+
+### Redirect using the captured "intended destination" pattern (auth flows)
+
+This is the pattern from [`AuthRouterComponent`](./auth-router): the login page captures where the user was trying to go, and the login callback redirects back there after success.
+
+```python
+def get_layout(self, protected_route):
+    self._target = protected_route
+    return html.Div([self.redirect(), html.Button("Log in", id=self.login_btn)])
+
+def register_callbacks(self, app):
+    @app.callback(Output(self.redirect.href_id, self.redirect.href_attr),
+                  Trigger(self.login_btn, "n_clicks"))
+    def login():
+        flask.session["user"] = "Alice"
+        return {"url": self._target, "target": "_self"}
+```
+
+## Render the component exactly once
+
+`RedirectComponent.get_layout()` returns a small client-side machinery (a `dcc.Store` plus a `<div>`). It must appear exactly once per page. Otherwise you get `DuplicateIdError`. The natural place is whatever component owns the redirect logic; render it via `self.redirect()` in that component's layout.
+
+If multiple components in a layout each need to redirect, give each its own `RedirectComponent` instance; don't share one across components.
+
+## What to read next
+
+- [`RedirectComponent` API reference](../api/redirect). Full signature.
+- [`AuthRouterComponent`](./auth-router). Uses redirects heavily.
+- [Example 06: Redirect](../examples/redirect). Minimal runnable demo.
