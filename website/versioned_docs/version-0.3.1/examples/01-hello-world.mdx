@@ -1,0 +1,51 @@
+---
+title: "01: Hello World"
+sidebar_label: "01: Hello World"
+---
+
+# 01: Hello World
+
+> The smallest possible Weaverlet app. A single `WeaverletComponent` subclass with a layout-only `get_layout` method, handed to `WeaverletApp`. No callbacks, no IDs, no composition. Just to confirm the install works and to see the shape of a component.
+
+## The script
+
+```python
+from weaverlet.base import WeaverletComponent, WeaverletApp
+from dash import html
+
+class HelloWorldComponent(WeaverletComponent):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def get_layout(self):
+        return html.Div(f'hello world!')
+
+helloworld_component = HelloWorldComponent()
+wapp = WeaverletApp(root_component=helloworld_component)
+wapp.app.run(port=8086)
+```
+
+## Expected output
+
+Running the app opens `http://localhost:8086` showing a blank white page with the text **"hello world!"**.
+
+## Notes
+
+- Every Weaverlet app needs at least one `WeaverletComponent` subclass with `get_layout` implemented and a single `WeaverletApp(root_component=...)` call.
+- `wapp.app.run(...)` is the modern Dash 4 entry point. **never** `app.run_server(...)`, which was removed in Dash 4.
+- The script uses the legacy import `from weaverlet.base import ...`. The modern equivalent is `from weaverlet import WeaverletComponent, WeaverletApp`: both work in 0.3+.
+
+## Try it locally
+
+```bash
+pip install weaverlet
+# Save the script above as helloworld.py
+python helloworld.py
+```
+
+## See also
+
+- [`WeaverletComponent`](../api/weaverlet-component)
+- [`WeaverletApp`](../api/weaverlet-app)
+- [Components. Concept](../concepts/components)

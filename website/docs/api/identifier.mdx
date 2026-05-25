@@ -1,0 +1,130 @@
+---
+title: Identifier
+sidebar_label: Identifier
+---
+
+# `Identifier`
+
+Descriptor that yields a Dash-unique element ID per `(instance, attribute)` pair.
+
+```python
+from weaverlet import Identifier
+```
+
+## Signature
+
+```python
+class Identifier:
+    """Descriptor that yields a Dash-unique id per (instance, attribute).
+
+    The id is computed lazily on first access and cached on the instance,
+    so it does not depend on any specific `__init__` ordering.
+    """
+
+    def __set_name__(self, owner: type, name: str) -> None: ...
+    def __get__(self, instance, owner) -> str: ...
+    def __set__(self, instance, value) -> None: ...  # always raises TypeError
+```
+
+## Usage
+
+Declare identifiers as **class-level descriptors**:
+
+```python
+class EchoComponent(WeaverletComponent):
+    text_input_id = Identifier()
+    echo_div_id = Identifier()
+
+    def get_layout(self):
+        return html.Div([
+            dcc.Input(id=self.text_input_id),
+            html.Div(id=self.echo_div_id),
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(Output(self.echo_div_id, "children"),
+                      Input(self.text_input_id, "value"))
+        def echo(v): return v or ""
+```
+
+The first access to `self.text_input_id` computes the ID; subsequent accesses return the cached value.
+
+## ID format
+
+```
+ClassName_attrName_hexInstanceId
+```
+
+For example:
+
+```
+EchoComponent_text_input_id_0x7f8d3c001a40
+```
+
+Built from:
+
+| Part | Source |
+|---|---|
+| `ClassName` | `instance.__class__.__name__` |
+| `attrName` | the attribute name passed via `__set_name__` |
+| `hexInstanceId` | `f"{id(instance):x}"`: hex of `id()` of the instance |
+
+The ID is **opaque**: treat it as a token, not a structured string. Never:
+
+- Compare two IDs by parsing parts.
+- Reverse-engineer the class or attribute from the ID.
+- Pattern-match on the format (it can change without notice).
+
+## Why a descriptor?
+
+A naive approach. Generating IDs in `__init__`: has problems:
+- Order-dependent on `super().__init__()` placement.
+- Hard to discover from outside the class (no class-level surface).
+- Tempts string-based ID assembly elsewhere in the codebase.
+
+The descriptor pattern produces a stable, deterministic ID per `(class, attribute, instance memory address)` tuple, computed lazily, with the surface visible at class declaration time. It also makes the class itself a clear contract: "this component owns these IDs."
+
+## Cache mechanics
+
+The ID is cached on the instance under `self.__dict__["_wlt_ids"][attr_name]`. This dict is initialized by `WeaverletComponent.__init__` via `setdefault`, but the cache also self-initializes on first access. So an identifier reference *before* `super().__init__()` runs still works.
+
+Two instances of the same class produce two separate caches, hence two separate IDs:
+
+```python
+e1 = EchoComponent()
+e2 = EchoComponent()
+assert e1.text_input_id != e2.text_input_id
+```
+
+## Pitfalls
+
+:::warning[Identifiers can't be assigned to]
+`Identifier.__set__` always raises `TypeError`. The following will fail:
+
+```python
+class Bad(WeaverletComponent):
+    btn_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.btn_id = "my_id"   # TypeError: Cannot manually assign a value to an Identifier.
+```
+
+If you want a configurable string, use a regular attribute or a kwarg. If you want a unique ID, use `Identifier` and accept the auto-generated one.
+:::
+
+:::warning[IDs change across process restarts]
+The ID embeds `id(instance)`: the CPython memory address. Two runs of the same app produce different ID strings. This is intentional: it discourages any code that depends on the stable form of an ID.
+
+This is also why **you should never persist Identifier-generated IDs** to a database, a URL, or any cross-restart storage.
+:::
+
+:::warning[Cross-component access is allowed but tracked]
+A parent can read a child's identifier (`self.child.btn_id`). Useful for cross-component callbacks. Just remember: the callback should be registered in the component that owns the ID, or in the lowest common ancestor that owns both the Input and Output sources. Don't register a callback in a sibling.
+:::
+
+## See also
+
+- [Components. Concept](../concepts/components)
+- [`WeaverletComponent`](./weaverlet-component)
+- [Quickstart](../quickstart). The smallest app using `Identifier`.

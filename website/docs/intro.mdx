@@ -1,0 +1,73 @@
+---
+title: Introduction
+sidebar_label: Introduction
+slug: /
+---
+
+# Weaverlet
+
+**Weaverlet** is an object-oriented framework for [Plotly Dash](https://dash.plotly.com/) developed by the [Observatorio Metropolitano CentroGeo](https://observatoriogeo.mx). It turns a Dash app into a hierarchy of reusable Python classes: each `WeaverletComponent` owns its own layout, callbacks, and identifiers; you compose them into a tree, hand the root to `WeaverletApp`, and ship.
+
+## The problem it solves
+
+Vanilla Dash and Dash Pages give you *primitives*, not *encapsulation*. In a typical Dash app:
+
+- **Callbacks live globally.** Every `@app.callback` registers against a single module-level `app`. Two widgets that want to be drop-in reusable can't coexist without you manually disambiguating their callbacks.
+- **IDs are strings you manage by hand.** You name a `dcc.Input` `"username-input"`. If you put two of them on the same page, you get `DuplicateIdError`: and the only fix is to either parameterize the ID through prop drilling, or use AIO pattern-matching, both of which leak through your codebase.
+- **The same widget can't be dropped into two apps without surgery.** You end up copy-pasting layout + callbacks and renaming things.
+
+Weaverlet packages **layout + callbacks + state** into reusable Python classes with auto-unique IDs, typed inter-component signals, and a router that preserves WebGL state across navigation.
+
+## Mental model
+
+Think of a Weaverlet app as a DAG of components:
+
+```
+WeaverletApp
+└── Root WeaverletComponent
+    ├── SimpleRouterComponent
+    │   ├── HomePage
+    │   ├── DashboardPage
+    │   │   ├── ChartComponent
+    │   │   └── FilterPanel
+    │   └── AboutPage
+    ├── SignalComponent (event bus)
+    └── StoreComponent (shared state)
+```
+
+Each node is a Python class. The DAG is walked once at app construction to wire context, call lifecycle hooks, and register every component's callbacks. After that, you have a regular Dash app. `WeaverletApp.app` is a [`DashProxy`](https://www.dash-extensions.com/) under the hood, so everything in the Dash ecosystem still works.
+
+## What Weaverlet adds
+
+- **Class-based encapsulation**: see [Components](./concepts/components).
+- **Auto-unique IDs** via the [`Identifier()`](./api/identifier) descriptor.
+- **Signal-based events**: see [Signals overview](./signals/overview).
+- **State-preserving routing** with [`keep_mounted=True`](./routing/keep-mounted). The v0.3 hero feature.
+- **Session-based auth routing**: see [`AuthRouterComponent`](./routing/auth-router).
+- **Shared context** propagated to every component in the DAG. See [Context](./concepts/context).
+
+## Who it's for
+
+- **Data scientists** whose dashboard has outgrown a single file and needs structure.
+- **Dash developers** who want true component reuse instead of copy-paste between apps.
+- **React-style developers** looking for the same class-based component paradigm, server-side, in pure Python.
+
+## How to read these docs
+
+If you're new to Weaverlet, follow the **Getting started** section in order: [Installation](./installation) → [Quickstart](./quickstart) → [Your first app](./first-app).
+
+Once you're past the basics, the **Core concepts**, **Signals**, and **Routing** sections explain the framework in depth. The **Examples** gallery has 14 self-contained scripts ordered by complexity, and the **API reference** documents every public class and helper.
+
+:::tip[For LLM coding assistants]
+Weaverlet ships a [`ReadMe.LLM.md`](https://github.com/observatoriogeo/weaverlet/blob/main/ReadMe.LLM.md) following the [ReadMe.LLM methodology](https://readmellm.github.io/): rules, context, 14 worked examples, API signatures, and patterns specifically formatted for assistants like Claude, GPT, and Codex. To use it from another project, drop one of these CDN URLs into your prompt or have your assistant fetch it:
+
+```
+# Latest (tracks main):
+https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@main/ReadMe.LLM.md
+
+# Pinned to v0.3.0:
+https://cdn.jsdelivr.net/gh/observatoriogeo/weaverlet@v0.3.0/ReadMe.LLM.md
+```
+
+There's also an [`llms.txt`](https://github.com/observatoriogeo/weaverlet/blob/main/llms.txt) at the repo root following the [llmstxt.org convention](https://llmstxt.org/) - a short index that tools like Cursor and Claude Code can auto-discover. See [For LLM coding assistants](./llm-assistants) for the full breakdown.
+:::

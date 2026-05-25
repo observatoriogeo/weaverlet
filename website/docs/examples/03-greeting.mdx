@@ -1,0 +1,50 @@
+---
+title: "03: Greeting"
+sidebar_label: "03: Greeting"
+---
+
+# 03: Greeting
+
+> A component that takes a constructor argument and renders it. Shows how to parameterize a component without resorting to props-as-strings or factory functions. You just pass kwargs to `__init__` and store them on `self`.
+
+## The script
+
+```python
+from weaverlet.base import WeaverletComponent, WeaverletApp
+from dash import html
+
+class GreetingComponent(WeaverletComponent):
+
+    def __init__(self, greeting_name, **kwargs):
+        super().__init__(**kwargs)
+        self.greeting_name = greeting_name
+
+    def get_layout(self):
+        return html.Div(f'hello {self.greeting_name}!')
+
+greeting_component = GreetingComponent(greeting_name='Oscar')
+wapp = WeaverletApp(root_component=greeting_component)
+wapp.app.run(port=8089)
+```
+
+## Expected output
+
+The page shows the text **"hello Oscar!"**.
+
+## Notes
+
+- Components are regular Python classes. They receive arguments via `__init__` like any other.
+- Always call `super().__init__(**kwargs)` first to give `WeaverletComponent` a chance to set up its DAG bookkeeping. Pass `**kwargs` through so callers can still set `name=...` and other base-class options.
+- The instance is a regular Python object: store data on `self`, reference it in `get_layout`. There's no equivalent of React props because there's no equivalent of React re-rendering.
+
+## Try it locally
+
+```bash
+pip install weaverlet
+python greeting.py
+```
+
+## See also
+
+- [Components. Concept](../concepts/components)
+- [`WeaverletComponent`: API reference](../api/weaverlet-component)

@@ -1,0 +1,126 @@
+---
+title: SignalInput / SignalOutput
+sidebar_label: Input / Output
+---
+
+# SignalInput and SignalOutput
+
+`SignalOutput` makes a callback **emit** to a signal. `SignalInput` makes a callback **listen** to a signal, receiving the payload as an argument.
+
+This is the bread-and-butter signal pattern. Use it whenever the consumer cares about *what* was emitted, not just *that* something was emitted.
+
+## Producer: `SignalOutput(sig)`
+
+```python
+@app.callback(SignalOutput(self.sig), Input(self.btn_id, "n_clicks"))
+def emit(n_clicks):
+    return {"clicks": n_clicks, "timestamp": time.time()}
+```
+
+The decorated function must return a **dict**. If you want to emit nothing useful (just signal that something happened), return `{}`: but in that case, prefer [`SignalTrigger`](./trigger) on the consumer side.
+
+`SignalOutput(sig)` is exactly equivalent to `Output(sig.signal_id, sig.signal_attr)` where `signal_attr` is `"data"` (the `dcc.Store` data prop). The helper exists so you never type the attribute name.
+
+### Multiple producers writing to the same signal
+
+This is allowed in Weaverlet because `WeaverletApp.app` is a `DashProxy`, which supports `group=` multi-output multiplexing automatically:
+
+```python
+@app.callback(SignalOutput(self.sig), Input(self.btn_a, "n_clicks"))
+def from_a(n): return {"source": "A", "n": n}
+
+@app.callback(SignalOutput(self.sig), Input(self.btn_b, "n_clicks"))
+def from_b(n): return {"source": "B", "n": n}
+```
+
+Both callbacks can target the same signal; whichever fires most recently wins. No manual `MATCH` / `ALL` / `group=` setup needed.
+
+## Consumer: `SignalInput(sig)`
+
+```python
+@app.callback(Output(self.out_id, "children"), SignalInput(self.sig))
+def show(payload):
+    return f"Got: {payload}"
+```
+
+The function receives the emitted dict as an argument. `SignalInput(sig)` is exactly equivalent to `Input(sig.signal_id, sig.signal_attr)`.
+
+The consumer fires on **every emission**, including the initial empty store value at startup. If you don't want to fire on startup, use `prevent_initial_call=True`:
+
+```python
+@app.callback(Output(self.out_id, "children"), SignalInput(self.sig),
+              prevent_initial_call=True)
+def show(payload):
+    return f"Got: {payload}"
+```
+
+### Multiple consumers reading from the same signal
+
+```python
+@app.callback(Output(self.first_out, "children"), SignalInput(self.sig))
+def show_one(payload): ...
+
+@app.callback(Output(self.second_out, "children"), SignalInput(self.sig))
+def show_two(payload): ...
+```
+
+Both consumers receive the same payload on each emission. No special setup.
+
+## Producer + consumer in different components
+
+The whole point of signals is to communicate across the DAG. Patterns vary, but the simplest: one component owns the signal, another component receives a reference to it.
+
+```python
+class ToolbarButton(WeaverletComponent):
+    btn_id = Identifier()
+
+    def __init__(self, signal):
+        super().__init__()
+        self.signal = signal           # we don't *own* it — just listen-and-emit
+
+    def get_layout(self):
+        return html.Button("Click", id=self.btn_id)
+
+    def register_callbacks(self, app):
+        @app.callback(SignalOutput(self.signal), Input(self.btn_id, "n_clicks"))
+        def emit(n): return {"clicks": n}
+
+
+class StatusBar(WeaverletComponent):
+    out_id = Identifier()
+
+    def __init__(self, signal):
+        super().__init__()
+        self.signal = signal
+
+    def get_layout(self):
+        return html.P(id=self.out_id)
+
+    def register_callbacks(self, app):
+        @app.callback(Output(self.out_id, "children"), SignalInput(self.signal))
+        def show(payload): return f"Last click: {payload}"
+
+
+class App(WeaverletComponent):
+    def __init__(self):
+        super().__init__()
+        self.sig = SignalComponent()              # ← owned here, shared below
+        self.toolbar = ToolbarButton(self.sig)
+        self.status = StatusBar(self.sig)
+
+    def get_layout(self):
+        return html.Div([self.sig(), self.toolbar(), self.status()])
+```
+
+`App` owns the `SignalComponent` and passes a reference to both children. Either child can emit, the other listens.
+
+:::tip[Render the signal exactly once]
+A `SignalComponent` is a `dcc.Store` under the hood. Calling its `get_layout()` (i.e. `self.sig()`) must happen exactly once per signal across the whole rendered layout, otherwise you get `DuplicateIdError`. The owner is the natural place to render it.
+:::
+
+## What to read next
+
+- [Trigger](./trigger). When consumers don't need the payload.
+- [Chains](./chains). Signal pipelines.
+- [Serverside](./serverside). Caching large payloads.
+- [Signal adapters API reference](../api/signal-adapters). Full signatures.

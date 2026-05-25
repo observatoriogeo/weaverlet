@@ -1,0 +1,164 @@
+---
+title: Your first Weaverlet app
+sidebar_label: First app
+---
+
+# Your first Weaverlet app
+
+This walkthrough builds a small two-page app. It introduces composition (one component owning another), the router, and signal-based communication between unrelated components.
+
+The finished app: a navbar at the top, two pages (`/` and `/counter`), and a counter on the second page whose value survives navigation back and forth.
+
+## The script
+
+```python
+from weaverlet import (
+    WeaverletComponent, WeaverletApp, Identifier,
+    SimpleRouterComponent,
+)
+from dash_extensions.enrich import Input, Output
+from dash import html, dcc
+
+
+# ─── A reusable navbar ────────────────────────────────────────────────────
+class NavbarComponent(WeaverletComponent):
+    def get_layout(self):
+        return html.Nav([
+            dcc.Link("Home", href="/", style={"marginRight": "1rem"}),
+            dcc.Link("Counter", href="/counter"),
+        ], style={"padding": "1rem", "borderBottom": "1px solid #ccc"})
+
+
+# ─── Page 1: a static home page ───────────────────────────────────────────
+class HomePage(WeaverletComponent):
+    def __init__(self):
+        super().__init__()
+        self.navbar = NavbarComponent()
+
+    def get_layout(self):
+        return html.Div([
+            self.navbar(),
+            html.Main([
+                html.H1("Welcome"),
+                html.P("Click 'Counter' above. Increment the counter, "
+                       "come back here, then go back to the counter — "
+                       "the value is preserved."),
+            ], style={"padding": "1rem"}),
+        ])
+
+
+# ─── Page 2: a counter that survives navigation ───────────────────────────
+class CounterPage(WeaverletComponent):
+    button_id = Identifier()
+    output_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.navbar = NavbarComponent()
+
+    def get_layout(self):
+        return html.Div([
+            self.navbar(),
+            html.Main([
+                html.H1("Counter"),
+                html.Button("Increment", id=self.button_id),
+                html.Div(id=self.output_id),
+            ], style={"padding": "1rem"}),
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(
+            Output(self.output_id, "children"),
+            Input(self.button_id, "n_clicks"),
+            prevent_initial_call=True,
+        )
+        def update(n_clicks):
+            return f"Clicks: {n_clicks}"
+
+
+# ─── 404 ──────────────────────────────────────────────────────────────────
+class NotFoundPage(WeaverletComponent):
+    def get_layout(self, pathname):
+        return html.Div(f"Page {pathname} not found.")
+
+
+# ─── Wire the router and run ──────────────────────────────────────────────
+router = SimpleRouterComponent(
+    routes={"/": HomePage(), "/counter": CounterPage()},
+    not_found_page_component=NotFoundPage(),
+    keep_mounted=True,        # this is the magic — see below
+)
+
+WeaverletApp(root_component=router, title="First Weaverlet App").app.run()
+```
+
+Save as `first_app.py`, run `python first_app.py`, open `http://localhost:8050/`.
+
+## What's new here
+
+### Composition
+
+`HomePage` and `CounterPage` each own a `NavbarComponent`:
+
+```python
+def __init__(self):
+    super().__init__()
+    self.navbar = NavbarComponent()
+```
+
+Two separate instances. They don't share state, but they share *code*. Each page calls `self.navbar()` in its layout to insert the navbar's rendered output. This is the basic composition pattern. See [DAG composition](./concepts/dag-composition) for details.
+
+:::tip
+`self.navbar()` is shorthand for `self.navbar.get_layout()`. Weaverlet wires `__call__` on every component to proxy to `get_layout`, which makes layouts read like JSX.
+:::
+
+### Routing
+
+`SimpleRouterComponent` maps URL paths to component instances. The router is the root, and `WeaverletApp(root_component=router)` makes it the entry point.
+
+```python
+router = SimpleRouterComponent(
+    routes={"/": HomePage(), "/counter": CounterPage()},
+    not_found_page_component=NotFoundPage(),
+    keep_mounted=True,
+)
+```
+
+When the URL is `/`, the router renders `HomePage`'s layout. When it's `/counter`, it renders `CounterPage`. Any other URL falls through to `NotFoundPage`.
+
+### `keep_mounted=True`
+
+This is the line that makes the counter survive navigation:
+
+```python
+keep_mounted=True,
+```
+
+Without it, Dash unmounts `CounterPage` when you navigate away. The `n_clicks` state on the button gets discarded; when you come back, you start at zero.
+
+With `keep_mounted=True`, the router renders **all** routes at startup and just toggles their visibility via CSS. Every component stays mounted; `n_clicks` survives; WebGL canvases keep their state. See [keep_mounted](./routing/keep-mounted) for the full story (and when to *not* use it).
+
+### Permissive `get_layout` signatures
+
+Notice `NotFoundPage`:
+
+```python
+def get_layout(self, pathname):
+    return html.Div(f"Page {pathname} not found.")
+```
+
+But `HomePage` and `CounterPage`:
+
+```python
+def get_layout(self):
+    return html.Div(...)
+```
+
+The router introspects each page's `get_layout` signature and passes only what the signature declares. The available kwargs are `pathname`, `hash`, `href`, `search` (plus `user` and `protected_route` for `AuthRouterComponent`). Declare what you need; omit what you don't.
+
+## What to read next
+
+- [Components](./concepts/components). The full `WeaverletComponent` contract.
+- [App lifecycle](./concepts/app-lifecycle). What happens between `WeaverletApp(...)` and your first page render.
+- [Signals overview](./signals/overview). Typed inter-component events.
+- [Examples gallery](./examples). 14 progressively complex example apps.

@@ -1,0 +1,152 @@
+---
+title: WeaverletComponent
+sidebar_label: WeaverletComponent
+---
+
+# `WeaverletComponent`
+
+Abstract base class for every Weaverlet UI block.
+
+```python
+from weaverlet import WeaverletComponent
+```
+
+## Signature
+
+```python
+class WeaverletComponent(ABC):
+    def __init__(self, name: str = "unnamed") -> None: ...
+
+    # Lifecycle hooks (optional to override)
+    def initialize(self) -> None: ...
+    def register_callbacks(self, app) -> None: ...
+
+    # Identity / hierarchy
+    def get_name(self) -> str: ...
+    def set_name(self, name: str) -> None: ...
+    def get_parent(self) -> "WeaverletComponent | None": ...
+    def get_context(self) -> dict[str, Any]: ...
+    def get_children(self) -> list["WeaverletComponent"]: ...
+    def get_id(self) -> str: ...
+
+    # Contract
+    @abstractmethod
+    def get_layout(self, *args, **kwargs): ...
+
+    def __call__(self, *args, **kwargs): ...   # proxies to get_layout
+    def __str__(self) -> str: ...
+```
+
+## Constructor
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `name` | `str` | `"unnamed"` | Optional human-readable name; useful in logs and for `get_name()` / `set_name()`. Doesn't affect behavior. |
+
+## Required override
+
+### `get_layout(self, *args, **kwargs)`
+
+Returns the Dash layout for this component. Must be overridden by every subclass. `WeaverletComponent` is abstract and won't instantiate otherwise.
+
+```python
+class MyComponent(WeaverletComponent):
+    def get_layout(self):
+        return html.Div("Hello")
+```
+
+May accept any subset of the router-injected kwargs (`pathname`, `hash`, `href`, `search`, plus `user` and `protected_route` for `AuthRouterComponent`). The router introspects your signature via `inspect.signature` and passes only declared kwargs.
+
+When a layout is rendered through `__call__` (i.e. `self.child(...)`), all positional and keyword arguments flow through unchanged.
+
+## Optional overrides
+
+### `initialize(self)`
+
+Runs once during the DAG walk, **before** `register_callbacks`. Use it to prepare state or resources callbacks will need:
+
+```python
+def initialize(self):
+    self.cache = {}
+    self.config = load_config()
+```
+
+Don't put heavy or async work here. There's no startup-time progress feedback.
+
+### `register_callbacks(self, app)`
+
+Where every callback owned by this component lives. `app` is `WeaverletApp.app`, a [`DashProxy`](https://www.dash-extensions.com/).
+
+```python
+def register_callbacks(self, app):
+    @app.callback(Output(self.out_id, "children"), Input(self.in_id, "value"))
+    def update(v): return v or ""
+```
+
+Reference IDs via `self.<identifier>`: never as string literals. Callbacks may close over `self`.
+
+## Identity / hierarchy methods
+
+| Method | Returns | Description |
+|---|---|---|
+| `get_name()` | `str` | The name passed to `__init__` (default `"unnamed"`). |
+| `set_name(name)` | `None` | Mutate the name after construction. |
+| `get_parent()` | `WeaverletComponent` or `None` | The parent component in the DAG, set by the walker. `None` on the root or before the walk. |
+| `get_context()` | `dict` | The shared context dict propagated by `WeaverletApp`. Empty `{}` before the walk runs. |
+| `get_children()` | `list[WeaverletComponent]` | Live-discovers children by introspecting `__dict__`: every attribute that is a `WeaverletComponent` or a `ComponentsList`/`ComponentsDict`/`ComponentsOrderedDict`. |
+| `get_id()` | `str` | A debugging identifier. `f"{ClassName}_{hex(id(self))}"`. Not a Dash element ID; use [`Identifier()`](./identifier) for those. |
+
+## `__call__`
+
+```python
+def __call__(self, *args, **kwargs):
+    return self.get_layout(*args, **kwargs)
+```
+
+This is what makes child rendering read naturally inside parent layouts:
+
+```python
+def get_layout(self):
+    return html.Div([self.navbar(brand="Weaverlet"), self.body()])
+```
+
+Don't override unless you have a strong reason. If you do, call `get_layout` from inside it.
+
+## Lifecycle
+
+In context. What `WeaverletApp` actually does with your component:
+
+1. **DAG walk #1**: starting from the root, visit every reachable `WeaverletComponent`. For each, set `_wlt_parent` and `_wlt_context`, then call `initialize()`.
+2. **Layout**: call `get_layout()` on the root with placeholder values for any router-style kwargs declared without defaults (`pathname="/"`, `hash=""`, `href=""`, `search=""`, `user=None`, `protected_route=""`).
+3. **DAG walk #2**: call `register_callbacks(app)` on every component.
+
+Components don't get re-initialized on each page render; the walks happen once.
+
+## Pitfalls
+
+:::warning[Don't override `__init__` without calling `super().__init__(**kwargs)`]
+The base `__init__` sets up `_wlt_ids`, `_wlt_name`, `_wlt_parent`, and `_wlt_context`. Skipping `super().__init__` breaks identifiers and the DAG walker:
+
+```python
+class Bad(WeaverletComponent):
+    def __init__(self, label):
+        # ← missing super().__init__()
+        self.label = label
+
+class Good(WeaverletComponent):
+    def __init__(self, label, **kwargs):
+        super().__init__(**kwargs)
+        self.label = label
+```
+:::
+
+:::warning[Callbacks belong to the component that owns the IDs]
+A callback in `Parent.register_callbacks` must not reference IDs from `Child`. The component that owns the `Identifier()` declarations is the one that should register the callbacks against them. Cross-component coordination should go through [signals](../signals/overview) or the [shared context](../concepts/context).
+:::
+
+## See also
+
+- [Components. Concept](../concepts/components)
+- [DAG composition](../concepts/dag-composition)
+- [`Identifier`](./identifier)
+- [`WeaverletApp`](./weaverlet-app)

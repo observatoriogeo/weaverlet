@@ -1,0 +1,147 @@
+---
+title: WeaverletComponent
+sidebar_label: Components
+---
+
+# WeaverletComponent
+
+`WeaverletComponent` is the abstract base class every Weaverlet UI block extends. A component owns its **layout**, its **callbacks**, its **identifiers**, and any **child components** it composes.
+
+## The contract
+
+Subclasses implement one required method and optionally three more:
+
+| Method | Required? | Purpose |
+|---|---|---|
+| [`get_layout(self, *args, **kwargs)`](#get_layout) | **Yes** | Returns the Dash layout for this component. |
+| [`register_callbacks(self, app)`](#register_callbacks) | No | Registers any Dash callbacks owned by this component. |
+| [`initialize(self)`](#initialize) | No | Runs once at app startup, before any callbacks are registered. |
+| [`__call__(self, *args, **kwargs)`](#__call__) | Built-in | Proxies to `get_layout`. Don't override unless you have a strong reason. |
+
+### `get_layout`
+
+```python
+def get_layout(self, *args, **kwargs):
+    return html.Div(...)
+```
+
+Returns the Dash layout. May accept any subset of the router-injected kwargs (`pathname`, `hash`, `href`, `search` for `SimpleRouterComponent`; plus `user` and `protected_route` for `AuthRouterComponent`); the router inspects your signature and only passes what you declare.
+
+```python
+class A(WeaverletComponent):
+    def get_layout(self): ...                                       # no router args
+
+class B(WeaverletComponent):
+    def get_layout(self, pathname): ...                             # only pathname
+
+class C(WeaverletComponent):
+    def get_layout(self, pathname, hash, href, search): ...         # full set
+```
+
+Inside `get_layout`, reference IDs as `self.<identifier>`. Insert child components by calling them: `self.child(...)`.
+
+### `register_callbacks`
+
+```python
+def register_callbacks(self, app):
+    @app.callback(Output(self.out_id, "children"),
+                  Input(self.in_id, "value"))
+    def update(value):
+        return value or ""
+```
+
+This is where every callback owned by this component lives. The `app` argument is `WeaverletApp.app`, a [`DashProxy`](https://www.dash-extensions.com/). So `group=`, `Trigger`, `Serverside(...)`, and `dash_extensions.javascript.assign()` all work without extra setup.
+
+:::warning[Callbacks belong to the component that owns the IDs]
+A callback in `Parent.register_callbacks` must not reference IDs from `Child`. The owning component registers the callback. This keeps lifecycle and ID resolution coherent.
+:::
+
+### `initialize`
+
+```python
+def initialize(self):
+    self.cache = {}     # or load a model, open a DB connection, etc.
+```
+
+Runs once during the DAG walk, **before** `register_callbacks`. Use it to prepare resources or compute state that callbacks will use. Avoid heavy work that should run lazily. There's no async support and no startup feedback to the user.
+
+### `__call__`
+
+Weaverlet wires `WeaverletComponent.__call__` to proxy to `get_layout`. That's why parent layouts call children like JSX:
+
+```python
+def get_layout(self):
+    return html.Div([
+        self.navbar(brand="Weaverlet"),       # calls navbar.get_layout(brand="Weaverlet")
+        self.sidebar(),
+        self.content(),
+    ])
+```
+
+You can override `__call__` if you need to (e.g., to add a default wrapper), but call `get_layout` from inside it and don't break the parent-renders-child convention.
+
+## Identifiers
+
+Element IDs are declared as **class-level descriptors**:
+
+```python
+class EchoComponent(WeaverletComponent):
+    text_input_id = Identifier()
+    echo_div_id = Identifier()
+
+    def get_layout(self):
+        return html.Div([
+            dcc.Input(id=self.text_input_id, type="text"),
+            html.Div(id=self.echo_div_id),
+        ])
+```
+
+`Identifier()` generates a unique Dash ID per **instance**, of the form `ClassName_attrName_hexInstanceId` (e.g. `EchoComponent_text_input_id_0x7f8d3c001a40`). Treat the string form as opaque. Never parse, compare, or pattern-match on it.
+
+Two instances of the same class produce two distinct ID sets. Drop two `EchoComponent()` instances into the same layout; Dash won't complain.
+
+:::tip[Why descriptors?]
+A naive approach. Assigning IDs in `__init__`: couples ID generation to instance lifecycle and makes IDs unstable across reloads. The descriptor pattern produces a stable, deterministic ID per (class, attribute, instance memory address) tuple, computed lazily on first access. See the [`Identifier`](../api/identifier) API reference for the gory details.
+:::
+
+## A complete component
+
+```python
+from weaverlet import WeaverletComponent, Identifier
+from dash_extensions.enrich import Input, Output
+from dash import html, dcc
+
+class GreetingComponent(WeaverletComponent):
+    name_input_id = Identifier()
+    greeting_id = Identifier()
+
+    def __init__(self, default_name="World", **kwargs):
+        super().__init__(**kwargs)
+        self.default_name = default_name
+
+    def initialize(self):
+        # Could load a translations table here, for example.
+        pass
+
+    def get_layout(self):
+        return html.Div([
+            dcc.Input(id=self.name_input_id, type="text",
+                      value=self.default_name),
+            html.Div(id=self.greeting_id),
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(Output(self.greeting_id, "children"),
+                      Input(self.name_input_id, "value"))
+        def greet(name):
+            return f"Hello, {name or 'stranger'}!"
+```
+
+Every Weaverlet component follows this same shape. Once you understand it, every other section of the docs is "what classes does Weaverlet ship to make composition easier".
+
+## What to read next
+
+- [DAG composition](./dag-composition). How parents own children and how the framework walks the resulting graph.
+- [App lifecycle](./app-lifecycle). What happens when you call `WeaverletApp(...)`.
+- [`Identifier` API reference](../api/identifier). Full details on the descriptor.
+- [`WeaverletComponent` API reference](../api/weaverlet-component). Full method signatures.

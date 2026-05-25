@@ -1,0 +1,147 @@
+---
+title: SignalComponent
+sidebar_label: SignalComponent
+---
+
+# `SignalComponent`
+
+The typed event bus. A `SignalComponent` is a `dcc.Store` under the hood, wrapped in a `WeaverletComponent` so producers and consumers reference it via `self.<signal>` instead of a string ID.
+
+```python
+from weaverlet import SignalComponent
+```
+
+## Signature
+
+```python
+class SignalComponent(WeaverletComponent):
+
+    signal_id = Identifier()
+    signal_group_id = Identifier()
+    signal_attr: str = 'data'
+    signal_default_retval: dict = {}
+
+    def __init__(self, name: str = "unnamed") -> None: ...
+
+    def get_layout(self) -> "dash.dcc.Store": ...
+    def register_callbacks(self, app) -> None: ...   # no-op
+```
+
+## Public attributes
+
+| Attribute | Type | Description |
+|---|---|---|
+| `signal_id` | `Identifier` | The underlying `dcc.Store`'s element ID. |
+| `signal_attr` | `str` (`'data'`) | The property on the store callbacks read/write. |
+| `signal_group_id` | `Identifier` | Group ID for use with `dash_extensions.enrich`'s `group=` multi-output multiplexing. |
+| `signal_default_retval` | `dict` (`{}`) | Default value used when callbacks need to "no-op emit". E.g. `StoreComponent`'s CLEAN op. |
+
+## What `get_layout` returns
+
+```python
+dcc.Store(id=self.signal_id, data={})
+```
+
+A `dcc.Store` with `data={}` initial value. You must render the signal exactly once per layout. Calling `self.sig()` inside the layout of whichever component owns it.
+
+`register_callbacks` is a no-op; `SignalComponent` has no callbacks of its own. It's pure plumbing.
+
+## Usage
+
+```python
+from weaverlet import (
+    WeaverletComponent, WeaverletApp, Identifier,
+    SignalComponent, SignalOutput, SignalInput,
+)
+from dash_extensions.enrich import Input, Output
+from dash import html
+
+
+class Demo(WeaverletComponent):
+    btn_id = Identifier()
+    out_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.sig = SignalComponent()         # owned here
+
+    def get_layout(self):
+        return html.Div([
+            self.sig(),                       # rendered exactly once
+            html.Button("Emit", id=self.btn_id),
+            html.P(id=self.out_id),
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(SignalOutput(self.sig), Input(self.btn_id, "n_clicks"))
+        def emit(n):
+            return {"clicks": n}
+
+        @app.callback(Output(self.out_id, "children"), SignalInput(self.sig))
+        def show(payload):
+            return f"Payload: {payload}"
+
+
+WeaverletApp(root_component=Demo()).app.run()
+```
+
+## Wiring callbacks to signals
+
+Don't write `Input(sig.signal_id, sig.signal_attr)` yourself. Use the [signal adapters](./signal-adapters):
+
+| To … | Use | Returns |
+|---|---|---|
+| Emit payload | `SignalOutput(sig)` | `Output` |
+| Receive payload | `SignalInput(sig)` | `Input` |
+| React to edge only | `SignalTrigger(sig)` | `Trigger` |
+| Read as State (no trigger) | `SignalState(sig)` | `State` |
+| Use as a group ID | `SignalGroup(sig)` | `str` |
+| Serverside-cached output | `ServersideSignalOutput(sig)` | `Output` (same as `SignalOutput` in 0.3+; wrap return value with `Serverside(...)`) |
+
+## Multiple writers to one signal
+
+Multiple producer callbacks can target the same signal because `WeaverletApp.app` is a `DashProxy` with `group=` multi-output multiplexing. No setup needed:
+
+```python
+@app.callback(SignalOutput(self.sig), Input(self.btn_a, "n_clicks"))
+def from_a(n): return {"source": "A", "n": n}
+
+@app.callback(SignalOutput(self.sig), Input(self.btn_b, "n_clicks"))
+def from_b(n): return {"source": "B", "n": n}
+```
+
+## Multiple readers
+
+Just as straightforward:
+
+```python
+@app.callback(Output(self.first_out, "children"), SignalInput(self.sig))
+def show_one(payload): ...
+
+@app.callback(Output(self.second_out, "children"), SignalInput(self.sig))
+def show_two(payload): ...
+```
+
+Both fire on every emission.
+
+## Pitfalls
+
+:::warning[Render `self.sig()` exactly once]
+A `SignalComponent` is a `dcc.Store` underneath. Rendering it twice in the same layout triggers `DuplicateIdError`. The owning component is the natural place to render it. If multiple components need to share a signal, the lowest common ancestor owns it and passes references to its descendants.
+:::
+
+:::warning[Producer callbacks must return a dict]
+Even if you have no meaningful payload, return `{}`. Don't return `None`, a string, or a non-dict. Downstream consumers expect a dict and may break.
+:::
+
+:::warning[The consumer fires on every emission, including the initial empty value]
+At app startup, `dcc.Store.data` is `{}` and `SignalInput`-based callbacks may fire once with that empty value. Use `prevent_initial_call=True` to skip startup firing.
+:::
+
+## See also
+
+- [Signals. Concept](../signals/overview)
+- [`SignalInput` / `SignalOutput`](../signals/input-output)
+- [Signal adapters. API reference](./signal-adapters)
+- [`DivSignalComponent`](./div-signal). Variant backed by an `html.Div`.
+- [Example 07: Signal input](../examples/signal-input)

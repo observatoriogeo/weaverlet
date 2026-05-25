@@ -1,0 +1,110 @@
+---
+title: Signal chains
+sidebar_label: Chains
+---
+
+# Signal chains
+
+A **chain** is a sequence of signals where each callback's output is the next one's input. Use chains to express step-by-step pipelines: validation → fetch → transform → display.
+
+Each step is its own callback. Dash handles execution order; you just wire the signals up.
+
+## The pattern
+
+```python
+import random
+from weaverlet import (
+    WeaverletComponent, WeaverletApp, Identifier,
+    SignalComponent, SignalOutput, SignalInput,
+)
+from dash_extensions.enrich import Output, Trigger
+from dash import html
+
+class ChainDemo(WeaverletComponent):
+    btn_id = Identifier()
+    out_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.sig1 = SignalComponent()
+        self.sig2 = SignalComponent()
+        self.sig3 = SignalComponent()
+
+    def get_layout(self):
+        return html.Div([
+            self.sig1(), self.sig2(), self.sig3(),
+            html.Button("Start chain", id=self.btn_id),
+            html.Pre(id=self.out_id),
+        ])
+
+    def register_callbacks(self, app):
+        # Step 1: button click → sig1
+        @app.callback(SignalOutput(self.sig1), Trigger(self.btn_id, "n_clicks"))
+        def step1():
+            return {"stage": 1, "started_at": "now"}
+
+        # Step 2: sig1 → sig2 (enrich payload)
+        @app.callback(SignalOutput(self.sig2), SignalInput(self.sig1))
+        def step2(payload):
+            payload["stage"] = 2
+            payload["random"] = random.random()
+            return payload
+
+        # Step 3: sig2 → sig3 (enrich further)
+        @app.callback(SignalOutput(self.sig3), SignalInput(self.sig2))
+        def step3(payload):
+            payload["stage"] = 3
+            payload["doubled"] = payload["random"] * 2
+            return payload
+
+        # Final: sig3 → display
+        @app.callback(Output(self.out_id, "children"), SignalInput(self.sig3))
+        def display(payload):
+            return f"Chain complete:\n{payload}"
+
+WeaverletApp(root_component=ChainDemo()).app.run()
+```
+
+Click "Start chain": `step1` fires, which emits to `sig1`, which fires `step2`, which emits to `sig2`, and so on. Each step runs in its own callback context, and Dash schedules them in order.
+
+## When chains are the right tool
+
+### Yes
+- **Sequenced async-like steps**: fetch user → fetch their orders → compute totals → render.
+- **Pluggable stages**: you can insert a `step2.5` between `step2` and `step3` later by emitting from a different consumer of `sig2`.
+- **Multiple consumers at each stage**: `sig2` could fan out to both a logger and the next step.
+
+### No
+- **Tight coupling**: if every step depends on the previous step's exact payload shape and there's no real fan-out, a single callback might be cleaner.
+- **Pure data transformation**: `step2` and `step3` above just enrich a dict. If you don't need them to be independently observable, write one function instead.
+
+The cost of a chain is one round-trip to the browser per stage (each emission writes to a `dcc.Store`, which round-trips through the browser back to Dash). Long chains (more than 4-5 stages) start to feel sluggish. Consider [serverside caching](./serverside) for large payloads, or collapse stages.
+
+## Chains across components
+
+Each `SignalComponent` can be owned by a different component:
+
+```python
+class Validator(WeaverletComponent):
+    def __init__(self, in_sig, out_sig):
+        super().__init__()
+        self.in_sig = in_sig
+        self.out_sig = out_sig
+
+    def get_layout(self): return html.Div()
+
+    def register_callbacks(self, app):
+        @app.callback(SignalOutput(self.out_sig), SignalInput(self.in_sig))
+        def validate(payload):
+            if not payload.get("user_id"):
+                payload["error"] = "missing user_id"
+            return payload
+```
+
+Build a pipeline by chaining `Validator`, `Fetcher`, `Transformer`, etc.. Each is a reusable component, each owns one step, the host wires up the signals between them.
+
+## What to read next
+
+- [Input / Output](./input-output). The basic producer/consumer mechanic.
+- [Serverside](./serverside). For chains carrying large payloads.
+- [Example 09: Signal chain](../examples/signal-chain). Minimal runnable example.

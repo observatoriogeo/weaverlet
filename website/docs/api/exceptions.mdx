@@ -1,0 +1,50 @@
+---
+title: Exceptions
+sidebar_label: Exceptions
+---
+
+# Exceptions
+
+## `WeaverletException`
+
+```python
+class WeaverletException(Exception):
+    pass
+```
+
+The base exception raised by Weaverlet itself. All framework-originated errors subclass `Exception` directly via this class (Weaverlet doesn't define more specific exception subclasses).
+
+```python
+from weaverlet import WeaverletException
+```
+
+### When it's raised
+
+| Site | Trigger |
+|---|---|
+| `SimpleRouterComponent._resolve_prefix` | `use_prefix=True` but `context["prefix"]` is missing. |
+| `AuthRouterComponent._resolve_prefix` | Same. `use_prefix=True` without a prefix in context. |
+| `RedirectComponent.get_layout` | Component constructed with `use_prefix=True` but `context["prefix"]` is missing. |
+| `StoreComponent.input_signal` dispatch | An op-dict with an unknown `op` value (anything other than `STORE`, `MERGE`, `CLEAN`). |
+
+### Catching it
+
+```python
+from weaverlet import WeaverletException
+
+try:
+    wapp = WeaverletApp(root_component=root)
+except WeaverletException as e:
+    print(f"Weaverlet setup error: {e}")
+```
+
+The errors are usually configuration-time (raised when the layout is first built), not runtime. If `WeaverletApp(...)` succeeds, you're past the danger zone.
+
+### Not in the hierarchy
+
+Weaverlet doesn't catch or remap Dash errors. `DuplicateIdError`, callback exceptions, etc. surface as their underlying Dash types. `WeaverletApp(jupyter_mode=True)` specifically raises `TypeError`, not `WeaverletException`, to match Python's standard practice for invalid-kwarg signaling.
+
+## See also
+
+- [`WeaverletComponent`](./weaverlet-component)
+- [`WeaverletApp`](./weaverlet-app)

@@ -1,0 +1,92 @@
+---
+title: DetachedComponentRef
+sidebar_label: DetachedComponentRef
+---
+
+# `DetachedComponentRef`
+
+Wraps a `WeaverletComponent` so the DAG walker doesn't descend into it. Use it to break cycles when one component needs to hold a back-reference to another that's already attached elsewhere in the tree.
+
+```python
+from weaverlet import DetachedComponentRef
+# or, for backwards-compat with the original (typo'd) name:
+from weaverlet import DetatchedComponentRef
+```
+
+## Signature
+
+```python
+class DetachedComponentRef:
+    def __init__(self, component: WeaverletComponent) -> None: ...
+    def __getattr__(self, attr): ...   # proxies to wrapped component
+
+# Alias preserved for backwards compatibility:
+DetatchedComponentRef = DetachedComponentRef
+```
+
+## What it does
+
+The DAG walker discovers child components by introspecting `__dict__` for `WeaverletComponent` instances. If component A holds `self.b = some_b_instance` and component B also holds `self.a = some_a_instance`, the walker would loop.
+
+`DetachedComponentRef` is a transparent wrapper: attribute access (`detached.x`) passes through to the wrapped component, but the walker doesn't recognize the wrapper as a `WeaverletComponent` (because `isinstance(detached, WeaverletComponent)` is `False`), so it skips it.
+
+The result: B can read `self.a_ref.some_attr` (which proxies to `a.some_attr`), but the walker never traverses `a` through B.
+
+## Usage
+
+```python
+from weaverlet import WeaverletComponent, DetachedComponentRef
+
+class A(WeaverletComponent):
+    def __init__(self):
+        super().__init__()
+        self.b = B(parent=self)         # A owns B; walker descends here
+
+    def get_layout(self):
+        return html.Div([self.b()])
+
+
+class B(WeaverletComponent):
+    def __init__(self, parent, **kwargs):
+        super().__init__(**kwargs)
+        # Wrap the back-reference — walker skips it.
+        self.parent_ref = DetachedComponentRef(parent)
+
+    def get_layout(self):
+        # Access parent attributes transparently.
+        return html.Div(f"My parent's name is {self.parent_ref.get_name()}")
+```
+
+## When you actually need it
+
+Most Weaverlet apps **don't have cycles** and don't need `DetachedComponentRef`. Reach for it only when:
+
+- A child genuinely needs to call back into its parent (rare. Usually the parent passes data into the child instead).
+- A utility component is shared by multiple parents, and one of those parents has the canonical ownership.
+- You've drawn the graph and confirmed the cycle is real.
+
+If you find yourself reaching for it often, the design is probably wrong. Prefer:
+- **Signals** for cross-component communication.
+- **Shared context** for app-wide config.
+- **Constructor arguments** for top-down data flow.
+
+## Pitfalls
+
+:::warning[Wrapping doesn't make the component a child somewhere else]
+`DetachedComponentRef` only hides the reference *from the wrapping component's perspective*. The wrapped component must still be reachable from the root through some other path, or its `initialize()` and `register_callbacks()` won't run.
+
+In the example above, `B` holds a `DetachedComponentRef(parent)`: that wrapper is what the walker skips. But `A` itself is reachable from the root (it's the root in this snippet), so `A` still gets walked. `A.b` is a regular reference, so `B` gets walked too. All good.
+:::
+
+:::warning[Don't use it to "hide" components from the walker for other reasons]
+The wrapper exists specifically for cycle-breaking. Don't use it to suppress callback registration on a component you don't want active. Instead, just don't attach that component to the DAG in the first place.
+:::
+
+:::warning[Both names work; new code should use `DetachedComponentRef`]
+The original 0.2.x name was `DetatchedComponentRef` (typo). 0.3+ exposes `DetachedComponentRef` and keeps the old name as an alias. New code should prefer the correct spelling.
+:::
+
+## See also
+
+- [DAG composition. Concept](../concepts/dag-composition)
+- [`WeaverletComponent`](./weaverlet-component)

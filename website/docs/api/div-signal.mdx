@@ -1,0 +1,118 @@
+---
+title: DivSignalComponent
+sidebar_label: DivSignalComponent
+---
+
+# `DivSignalComponent`
+
+Variant of [`SignalComponent`](./signal) whose underlying element is an `html.Div` instead of a `dcc.Store`. The signal's "value" lives in the div's `children` prop rather than a store's `data` prop.
+
+```python
+from weaverlet import DivSignalComponent
+```
+
+## Signature
+
+```python
+class DivSignalComponent(WeaverletComponent):
+
+    signal_id = Identifier()
+    signal_group_id = Identifier()
+    signal_attr: str = 'children'
+    signal_default_retval: dict = {}
+
+    def __init__(self, name: str = "unnamed") -> None: ...
+
+    def get_layout(self) -> "dash.html.Div": ...
+    def register_callbacks(self, app) -> None: ...   # no-op
+```
+
+## Public attributes
+
+| Attribute | Type | Description |
+|---|---|---|
+| `signal_id` | `Identifier` | The underlying `html.Div`'s element ID. |
+| `signal_attr` | `str` (`'children'`) | The property callbacks read/write. **Different from `SignalComponent.signal_attr` (`'data'`).** |
+| `signal_group_id` | `Identifier` | Group ID for use with `group=` multi-output. |
+| `signal_default_retval` | `dict` (`{}`) | Default fallback value. |
+
+## What `get_layout` returns
+
+```python
+html.Div(id=self.signal_id, children='')
+```
+
+An `html.Div` with empty children. The signal adapters automatically use `signal_attr='children'` instead of `'data'`, so all the standard signal adapters work the same way:
+
+- `SignalOutput(div_sig)` → `Output(div_sig.signal_id, "children")`
+- `SignalInput(div_sig)` → `Input(div_sig.signal_id, "children")`
+- `SignalTrigger(div_sig)` → `Trigger(div_sig.signal_id, "children")`
+- etc.
+
+## When to use `DivSignalComponent` over `SignalComponent`
+
+Use it when you want the signal's value to **also be rendered in the DOM**. Two common cases:
+
+1. **Visible state indicator**: the signal carries a text or HTML snippet that should appear on the page. A `dcc.Store` is invisible, so the standard `SignalComponent` couldn't do this; a `div` shows its `children` value.
+
+2. **Placeholder updates**: a div whose `children` gets replaced by a signal-driven callback. The div serves both as the placeholder slot in the layout and as the signal endpoint.
+
+For pure inter-component events with no DOM presence, prefer [`SignalComponent`](./signal). It's the more common pattern.
+
+## Example
+
+```python
+from weaverlet import (
+    WeaverletComponent, WeaverletApp, Identifier,
+    DivSignalComponent, SignalOutput, SignalTrigger,
+)
+from dash_extensions.enrich import Output, Trigger
+from dash import html
+
+
+class DivSignalDemo(WeaverletComponent):
+    btn_id = Identifier()
+    out_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.sig = DivSignalComponent()
+
+    def get_layout(self):
+        return html.Div([
+            self.sig(),                           # rendered exactly once
+            html.Button("Trigger", id=self.btn_id),
+            html.Div(id=self.out_id),
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(SignalOutput(self.sig), Trigger(self.btn_id, "n_clicks"))
+        def fire():
+            return {}
+
+        @app.callback(Output(self.out_id, "children"), SignalTrigger(self.sig))
+        def update():
+            return "Div updated by signal!"
+
+
+WeaverletApp(root_component=DivSignalDemo()).app.run()
+```
+
+## Pitfalls
+
+:::warning[`signal_attr` differs from `SignalComponent`]
+`SignalComponent.signal_attr = 'data'`; `DivSignalComponent.signal_attr = 'children'`. The adapter functions handle this transparently. `SignalOutput(sig)` does the right thing regardless of which class `sig` is.
+
+But if you write raw `Output(sig.signal_id, "data")` yourself, you'll target the wrong prop on a `DivSignalComponent`. Always use the adapters.
+:::
+
+:::warning[Same single-render rule as `SignalComponent`]
+Render `self.sig()` exactly once per layout. Two renders trigger `DuplicateIdError`.
+:::
+
+## See also
+
+- [`SignalComponent`](./signal)
+- [Signal adapters](./signal-adapters)
+- [Signals. Concept](../signals/overview)
+- [Example 10: Div signal](../examples/div-signal)

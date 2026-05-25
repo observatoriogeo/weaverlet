@@ -1,0 +1,127 @@
+---
+title: DAG composition
+sidebar_label: DAG composition
+---
+
+# DAG composition
+
+A Weaverlet app is a **directed acyclic graph** (DAG) of components. The root is one `WeaverletComponent`; its children are other components stored as `self.<attr>`; each child can own its own children; and so on.
+
+`WeaverletApp` walks this DAG once at construction to wire context, run `initialize()`, and register callbacks. After that, the DAG is essentially read-only. Components are instantiated, layouts are rendered, and the app runs.
+
+## The basic rules
+
+### Rule 1. Own your children in `__init__`
+
+```python
+class Parent(WeaverletComponent):
+    def __init__(self):
+        super().__init__()
+        self.child = ChildComponent()
+        self.other = AnotherComponent(arg="hello")
+```
+
+Anything assigned to `self.<attr>` that is a `WeaverletComponent` instance is automatically discovered by the DAG walker. There is no `add_child()` method; no `_children` list to maintain.
+
+### Rule 2. Call children inside the parent's layout
+
+```python
+class Parent(WeaverletComponent):
+    def __init__(self):
+        super().__init__()
+        self.child = ChildComponent()
+
+    def get_layout(self):
+        return html.Div([
+            html.H1("Parent"),
+            self.child(),              # renders ChildComponent's layout here
+            self.child(extra="kw"),     # would do the same with kwargs forwarded
+        ])
+```
+
+`self.child()` is shorthand for `self.child.get_layout()`. The child component is rendered as part of the parent's layout tree.
+
+:::tip[Same instance, same identity]
+Calling `self.child()` twice in the same layout doesn't create two instances. Both calls render the *same* `ChildComponent` instance. Because that instance owns its `Identifier()`s, the second render would emit the same Dash IDs, causing `DuplicateIdError`. If you need two independent children of the same class, instantiate twice:
+
+```python
+self.child_a = ChildComponent()
+self.child_b = ChildComponent()
+```
+:::
+
+### Rule 3. Children can be in collections
+
+Sometimes you want a list or dict of children:
+
+```python
+from weaverlet import WeaverletComponent, ComponentsDict
+
+class TabComponent(WeaverletComponent):
+    ...
+
+class TabsRow(WeaverletComponent):
+    def __init__(self):
+        super().__init__()
+        self.tabs = ComponentsDict({
+            "home": TabComponent(label="Home"),
+            "about": TabComponent(label="About"),
+        })
+
+    def get_layout(self):
+        return html.Div([tab() for tab in self.tabs.values()])
+```
+
+`ComponentsDict`, `ComponentsList`, and `ComponentsOrderedDict` are ABCs the DAG walker recognizes as containing more `WeaverletComponent`s. Routers use them internally to hold their `routes`.
+
+## What the DAG walk does
+
+When `WeaverletApp(root_component=root)` runs:
+
+1. Starting from `root`, walk every reachable `WeaverletComponent` (via `__dict__` introspection and the collection ABCs).
+2. Track visited components in a set to avoid infinite loops.
+3. For each component:
+   - Propagate `self._wlt_context` so `self.get_context()` returns the app's context dict.
+   - Set up the parent → child back-reference (so `child.get_parent()` works).
+   - Call `initialize()` if the component defines it.
+4. Once the walk completes, register every component's callbacks.
+
+The walk is **lazy on instance identity**: children are discovered by introspecting `__dict__` at walk time, not by precomputing a `_children` list. This means a component you build dynamically in `initialize()` is also picked up correctly. But only if `initialize()` adds the child before the walk reaches it, which is the case for the root's own `initialize()` but rarely useful otherwise.
+
+## Cycles
+
+The DAG must be acyclic. If two components hold direct references to each other, the walker would loop forever. To break a cycle, wrap one back-reference in `DetachedComponentRef`:
+
+```python
+from weaverlet import WeaverletComponent, DetachedComponentRef
+
+class Parent(WeaverletComponent):
+    def __init__(self):
+        super().__init__()
+        self.child = ChildComponent(parent=self)        # ← cycle!
+
+class ChildComponent(WeaverletComponent):
+    def __init__(self, parent, **kwargs):
+        super().__init__(**kwargs)
+        # Wrap the back-reference so the DAG walker skips it.
+        self.parent_ref = DetachedComponentRef(parent)
+```
+
+`DetachedComponentRef` proxies attribute access to the wrapped component but is invisible to the DAG walker. Use it sparingly. Most Weaverlet apps don't need cycles at all.
+
+The original 0.2.x name was `DetatchedComponentRef` (typo); both names work in 0.3+.
+
+## Why a DAG, not a tree?
+
+Most Weaverlet apps *are* trees in practice. The DAG abstraction admits things a strict tree wouldn't, though:
+
+- **Aliasing under `keep_mounted=True`**: a router can map multiple paths to the same component instance, sharing one wrapper across both. Under a tree, this would require duplicate instances.
+- **Shared utility components**: a single `RedirectComponent` referenced from multiple pages, each of which uses `DetachedComponentRef` to break the back-pointers.
+
+Practically: build trees. Reach for `DetachedComponentRef` only when you've already drawn the graph on paper and confirmed you need a cycle.
+
+## What to read next
+
+- [Context](./context). How the shared context dict flows through the DAG.
+- [App lifecycle](./app-lifecycle). What the walker actually does at construction time.
+- [`DetachedComponentRef` API reference](../api/detached-ref). Full details.

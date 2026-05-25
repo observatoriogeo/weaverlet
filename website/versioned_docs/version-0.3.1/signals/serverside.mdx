@@ -1,0 +1,100 @@
+---
+title: Serverside signals
+sidebar_label: Serverside
+---
+
+# Serverside signals
+
+By default, every signal payload round-trips through the browser: producer callback runs server-side, payload goes to the client (as a `dcc.Store`), then back to the server when consumers fire. That's fine for small dicts. For large dataframes, model outputs, or anything you'd rather keep on the server, use **serverside caching**.
+
+Weaverlet exposes this via `Serverside(...)` and `ServersideSignalOutput(...)`, both of which are thin wrappers around the corresponding `dash_extensions.enrich` machinery.
+
+## The pattern
+
+```python
+from weaverlet import (
+    WeaverletComponent, WeaverletApp, Identifier,
+    SignalComponent, ServersideSignalOutput, SignalInput,
+    Serverside,
+)
+from dash_extensions.enrich import Input, Output
+from dash import html, dcc
+import pandas as pd
+
+
+class Dashboard(WeaverletComponent):
+    btn_id = Identifier()
+    out_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.sig = SignalComponent()
+
+    def get_layout(self):
+        return html.Div([
+            self.sig(),
+            html.Button("Load dataset", id=self.btn_id),
+            html.Div(id=self.out_id),
+        ])
+
+    def register_callbacks(self, app):
+        # Producer: cache the dataframe server-side, send only a token to the browser.
+        @app.callback(ServersideSignalOutput(self.sig), Input(self.btn_id, "n_clicks"),
+                      prevent_initial_call=True)
+        def load(_):
+            df = pd.read_csv("/path/to/large.csv")          # 50 MB dataframe
+            return Serverside(df)                            # wrap the return value
+
+        # Consumer: receives the same dataframe, transparently.
+        @app.callback(Output(self.out_id, "children"), SignalInput(self.sig))
+        def display(df):
+            return html.Pre(df.head().to_string())
+
+WeaverletApp(root_component=Dashboard()).app.run()
+```
+
+The dataframe never leaves the server. The producer's return value is wrapped in `Serverside(...)`, which `dash_extensions` caches; only an opaque token is sent to the browser. When the consumer's callback fires, the framework resolves the token back to the cached object.
+
+## Two pieces
+
+### `ServersideSignalOutput(sig)`
+
+Replaces `SignalOutput(sig)` on the producer side. Returns a plain `Output`, but tells the dash-extensions cache machinery to look for a `Serverside`-wrapped return value.
+
+In Weaverlet 0.3+ this is **identical** to `SignalOutput(sig)`: both return a plain `Output(sig.signal_id, sig.signal_attr)`. The reason the helper exists is API symmetry with the 0.2.x days when serverside outputs were a distinct type. Today, what determines whether caching happens is whether you wrap the return value with `Serverside(...)`.
+
+### `Serverside(value)`
+
+A value wrapper. Use it on the **return value** of a callback whose output is intended to be cached:
+
+```python
+@app.callback(ServersideSignalOutput(self.sig), ...)
+def emit():
+    big_object = compute_something_expensive()
+    return Serverside(big_object)
+```
+
+`Serverside` is re-exported from `weaverlet` for convenience; you can also import it directly from `dash_extensions.enrich`.
+
+## What gets cached, where
+
+By default, `dash_extensions.enrich` uses an in-memory cache scoped to the Flask app. For a single-process dev server, that's fine. For multi-worker production deployments, you'll want to configure a shared cache backend (Redis, filesystem) so workers see each other's cached values.
+
+See the [dash-extensions Serverside docs](https://www.dash-extensions.com/sections/serverside) for cache backend configuration.
+
+## When to use it
+
+| Use serverside when | Use regular signals when |
+|---|---|
+| Payload is > a few hundred KB | Small dicts (strings, numbers, short lists) |
+| Payload is a dataframe, numpy array, or fitted model | Plain JSON-serializable data |
+| Producer and consumer both run server-side anyway | Consumer is a clientside callback or another browser tab |
+| You can tolerate eventual cache eviction | You need the value to live forever |
+
+Don't reach for serverside by default. The small extra complexity (cache configuration, eviction edge cases, multi-worker setup) only pays off when the payload size justifies it.
+
+## What to read next
+
+- [Input / Output](./input-output). Regular signal semantics.
+- [`StoreComponent`](./store-component). For persistent app state.
+- [dash-extensions Serverside docs](https://www.dash-extensions.com/sections/serverside). Cache backends and configuration.

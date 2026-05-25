@@ -1,0 +1,178 @@
+---
+title: SimpleRouterComponent
+sidebar_label: SimpleRouterComponent
+---
+
+# `SimpleRouterComponent`
+
+Path-based router with optional state-preserving `keep_mounted` mode.
+
+```python
+from weaverlet import SimpleRouterComponent
+```
+
+## Signature
+
+```python
+class SimpleRouterComponent(RouterComponent):
+
+    content_id = Identifier()
+    url_id = Identifier()
+
+    def __init__(
+        self,
+        routes: dict[str, WeaverletComponent],
+        not_found_page_component: WeaverletComponent,
+        use_prefix: bool = False,
+        keep_mounted: bool = False,
+        preserve_path: str | None = None,
+        name: str = "unnamed",
+    ) -> None: ...
+```
+
+## Parameters
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `routes` | `dict[str, WeaverletComponent]` | **required** | Maps URL paths to component instances. Multiple paths may point to the same instance (aliasing). |
+| `not_found_page_component` | `WeaverletComponent` | **required** | Component rendered when no route matches. |
+| `use_prefix` | `bool` | `False` | If `True`, the router strips a path prefix (read from `context["prefix"]`) before matching. |
+| `keep_mounted` | `bool` | `False` | If `True`, every unique route is rendered at startup and navigation toggles CSS visibility. Preserves React + WebGL state. See [keep_mounted](../routing/keep-mounted). |
+| `preserve_path` | `str` or `None` | `None` | Under `keep_mounted=True`, the path whose wrapper uses `visibility:hidden` (canvas-safe) when inactive. Defaults to the first canonical path in `routes`. |
+| `name` | `str` | `"unnamed"` | Component name. |
+
+## Class-level identifiers
+
+| Identifier | What it is |
+|---|---|
+| `url_id` | The `dcc.Location` that supplies `pathname`, `hash`, `href`, `search` to the router. Useful as an `Input` source for callbacks elsewhere in the app that need the current URL. |
+| `content_id` | The `<div>` whose `children` is swapped on navigation (only used when `keep_mounted=False`). |
+
+## Routes
+
+Each entry in `routes` is `path → component_instance`. Paths are exact-match (no path templating); the router walks `routes.keys()` in order and picks the first match.
+
+### Aliasing
+
+Multiple paths may map to the same component instance:
+
+```python
+home = HomePage()
+routes = {"/": home, "/home": home, "/index.html": home}
+```
+
+The router picks the **first encountered path** as the *canonical* path; aliases share its wrapper. Aliasing works in both `keep_mounted=False` and `keep_mounted=True` modes. Under the latter, the framework uses one canonical wrapper for the aliased paths so the same `Identifier()`-bearing layout doesn't mount twice.
+
+If `preserve_path` is set to an aliased path, it's normalized to the canonical one.
+
+### Routed component signatures
+
+Components in `routes` may declare any subset of `(pathname, hash, href, search)` in their `get_layout` signature. The router introspects the signature via `inspect.signature` and passes only declared kwargs:
+
+```python
+class A(WeaverletComponent):
+    def get_layout(self): ...                                # no router args
+
+class B(WeaverletComponent):
+    def get_layout(self, pathname): ...                      # only pathname
+
+class C(WeaverletComponent):
+    def get_layout(self, pathname, hash, href, search): ...  # full set
+```
+
+## How it works
+
+### `keep_mounted=False` (default)
+
+The router renders:
+
+```python
+html.Div([
+    dcc.Location(id=self.url_id, refresh=False),
+    html.Div(id=self.content_id),
+])
+```
+
+One callback (`Input(url_id, "pathname")` → `Output(content_id, "children")`) replaces `content_id.children` on each navigation. The previously-shown component is unmounted; the new one is mounted.
+
+### `keep_mounted=True`
+
+The router renders **all unique-instance routes at startup**, each inside its own wrapper `<div>`. A callback toggles `style` on each wrapper based on the current `pathname`:
+
+- Active route: `_VISIBLE_STYLE` (or `_VISIBLE_STYLE_OVERLAY` for non-preserve paths).
+- Hidden non-preserve path: `_HIDDEN_STYLE_DISPLAY_NONE`.
+- Hidden preserve path: `_HIDDEN_STYLE_PRESERVE` (uses `visibility:hidden`, keeps the canvas dimensioned).
+
+The not-found page also gets its own wrapper unless it shares an instance with a route, in which case the router reuses that route's wrapper.
+
+### Dynamic 404 under `keep_mounted=True`
+
+When the URL doesn't match any route and the not-found component is its own distinct instance, a second callback re-renders the not-found wrapper's children with the live `pathname`. So this template displays the actual URL:
+
+```python
+class NotFound(WeaverletComponent):
+    def get_layout(self, pathname):
+        return html.Div(f"Page {pathname} not found")
+```
+
+If the not-found component shares an instance with a route, this dynamic re-render is skipped.
+
+## Prefixing
+
+When your app is mounted under a subpath:
+
+```python
+router = SimpleRouterComponent(
+    routes=...,
+    not_found_page_component=...,
+    use_prefix=True,
+)
+WeaverletApp(root_component=router, context={"prefix": "/myapp"}).app.run()
+```
+
+- The router strips `/myapp` from incoming `pathname`s before matching.
+- The `prefix` value comes from `context["prefix"]`. If `use_prefix=True` and the key is missing, the router raises `WeaverletException`.
+
+## Pitfalls
+
+:::warning[Aliasing under `keep_mounted=True` is allowed (and shares one wrapper)]
+Pre-0.3, aliasing two paths to the same instance under `keep_mounted=True` would raise `DuplicateIdError`. 0.3+ relaxed this: the router detects the shared instance and uses one canonical wrapper for all aliased paths. Don't worry about aliasing. The framework handles it.
+:::
+
+:::warning[Don't share a `not_found_page_component` with `keep_mounted=False`]
+Under `keep_mounted=False` the framework doesn't share wrappers across paths and the not-found component is mounted/unmounted per-render. It still works, but you lose the optimization. Under `keep_mounted=True` it works and shares the wrapper.
+:::
+
+:::warning[Callbacks for `keep_mounted=True` fire for hidden routes too]
+Every mounted component's callbacks are live, regardless of visibility. If you have a "fetch on URL change" callback you only want firing for the active page, gate it on `Input(router.url_id, "pathname")` and check the path inside the callback.
+:::
+
+## Example
+
+```python
+from weaverlet import WeaverletApp, WeaverletComponent, SimpleRouterComponent
+from dash import html
+
+class Home(WeaverletComponent):
+    def get_layout(self): return html.Div("Home")
+
+class About(WeaverletComponent):
+    def get_layout(self): return html.Div("About")
+
+class NotFound(WeaverletComponent):
+    def get_layout(self, pathname): return html.Div(f"404: {pathname}")
+
+router = SimpleRouterComponent(
+    routes={"/": Home(), "/about": About()},
+    not_found_page_component=NotFound(),
+    keep_mounted=True,
+)
+WeaverletApp(root_component=router).app.run()
+```
+
+## See also
+
+- [`SimpleRouterComponent`: concept](../routing/simple-router)
+- [`keep_mounted`: concept](../routing/keep-mounted)
+- [`AuthRouterComponent`](./auth-router). Auth-gated routing.
+- [Example 04: Router](../examples/router) and [Example 14: DMC + keep_mounted](../examples/dmc-keep-mounted).

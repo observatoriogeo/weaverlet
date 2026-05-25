@@ -1,0 +1,67 @@
+---
+title: Compatibility
+sidebar_label: Compatibility
+---
+
+# Compatibility
+
+## Runtime
+
+| | |
+|---|---|
+| Python | ≥ 3.12 |
+| Dash | ≥ 4.1.0, < 5.0.0 |
+| dash-extensions | ≥ 1.0.0, < 3.0.0 (1.x and 2.x both supported) |
+
+Weaverlet 0.3.x dropped support for Python < 3.12. If you can't upgrade, pin to Weaverlet 0.2.x. It remains importable but no longer receives updates.
+
+## Optional dependencies (for examples)
+
+| Package | Required by examples | Install via |
+|---|---|---|
+| `dash-bootstrap-components` ≥ 2.0 | 11, 12, 13 | `pip install weaverlet[examples]` |
+| `dash-mantine-components` ≥ 2.0 | 14 | `pip install weaverlet[examples]` |
+| `flask` | All auth examples (transitive) | bundled with Dash |
+
+See [Installation](./installation) for the full optional-extras reference.
+
+## Breaking changes from 0.2 → 0.3
+
+The 0.3 release is mostly backwards-compatible at the API surface but breaks on environment:
+
+- **Python < 3.12 no longer installs.** Pre-3.12 syntax/typing features used internally.
+- **Dash 4.x required.** `app.run_server(...)` is gone; use `app.run(...)`.
+- **`jupyter-dash` removed as a dependency.** Dash 4 absorbed Jupyter support into core; pass `jupyter_mode` to `app.run()` instead of `WeaverletApp(jupyter_mode=True)`.
+- **`Identifier` ID format changed** from `{hex_id}-{name}-{attr}` to `{ClassName}_{attr}_{hex_id_of_instance}`. User code is unaffected. IDs are opaque tokens accessed via `self.<identifier>`: unless you were comparing the string form, which you should never do.
+- **`get_page_root()` removed.** Unused since 0.2.
+- **Build system switched** from `setup.py` (setuptools) to `pyproject.toml` (PEP 621 / hatchling). `pip install weaverlet` keeps working.
+
+For the full list, see the [Changelog](./changelog).
+
+## Backwards-compatible imports
+
+The 0.2 import paths still work:
+
+```python
+# Both of these work in 0.3+:
+from weaverlet import WeaverletComponent           # preferred
+from weaverlet.base import WeaverletComponent       # legacy, still supported
+
+from weaverlet import SimpleRouterComponent
+from weaverlet.components import SimpleRouterComponent
+```
+
+Prefer the top-level imports in new code; the submodule paths are kept for compatibility but won't be deprecated soon.
+
+## Versioning policy
+
+Weaverlet follows semantic versioning:
+- **0.x.y patch releases** never break API.
+- **0.x minor releases** may break API; check the [Changelog](./changelog).
+- **1.0** is not yet on the roadmap.
+
+## What to read next
+
+- [Installation](./installation). Install commands per package manager.
+- [Changelog](./changelog). Full version history.
+- [Comparisons](./comparisons). Weaverlet vs Dash Pages vs AIO.

@@ -1,0 +1,62 @@
+---
+title: Examples
+sidebar_label: Overview
+---
+
+# Examples
+
+14 self-contained example apps that ship with Weaverlet, ordered by complexity. Each one runs standalone. Copy the script, save it, run it. Pages 01-10 only need `pip install weaverlet`; pages 11-14 need `pip install "weaverlet[examples]"` for Dash Bootstrap / Dash Mantine.
+
+The source files live in [`examples/`](https://github.com/observatoriogeo/weaverlet/tree/main/examples) in the Weaverlet repo.
+
+## Basics
+
+| # | Page | Demonstrates |
+|--:|---|---|
+| 01 | [Hello World](./hello-world) | Minimal layout-only component |
+| 02 | [Echo](./echo) | Layout + callbacks + `Identifier` |
+| 03 | [Greeting](./greeting) | Constructor-injected state |
+
+## Routing
+
+| # | Page | Demonstrates |
+|--:|---|---|
+| 04 | [Router](./router) | Multipage with `SimpleRouterComponent` |
+| 05 | [Auth router](./auth-router) | Session-protected routes via `AuthRouterComponent` |
+| 06 | [Redirect](./redirect) | Programmatic redirect from a callback |
+
+## Signals
+
+| # | Page | Demonstrates |
+|--:|---|---|
+| 07 | [Signal input](./signal-input) | Signals carrying a payload |
+| 08 | [Signal trigger](./signal-trigger) | Edge-only triggers |
+| 09 | [Signal chain](./signal-chain) | Chained signal pipeline |
+| 10 | [Div signal](./div-signal) | Signal-driven element updates |
+
+## Dash Bootstrap & Dash Mantine
+
+| # | Page | Demonstrates |
+|--:|---|---|
+| 11 | [DBC single](./dbc-single) | Single-page Weaverlet + Dash Bootstrap |
+| 12 | [DBC multipage](./dbc-multipage) | Multipage with DBC navbar |
+| 13 | [DBC modal](./dbc-modal) | DBC modal triggered by a signal |
+| 14 | [DMC + `keep_mounted`](./dmc-keep-mounted) | Dash Mantine + `AppShell` + state preservation |
+
+## How to use this gallery
+
+- **New to Weaverlet?** Start with [01 Hello World](./hello-world) and walk through in order. Each example builds on the previous.
+- **Looking for a specific pattern?** Use the table above as an index. The "Demonstrates" column tells you what each example showcases without making you open it.
+- **Already familiar with Dash?** Jump to [04 Router](./router) for the routing story, [07 Signal input](./signal-input) for inter-component communication, and [14 DMC + `keep_mounted`](./dmc-keep-mounted) for the v0.3 hero feature.
+
+## Code conventions in the gallery
+
+The on-disk scripts use the legacy `from weaverlet.base import ...` / `from weaverlet.components import ...` import style. This still works in 0.3+ but the modern equivalent is `from weaverlet import ...` (everything is re-exported from the top level). The script in [Example 14](./dmc-keep-mounted) uses the modern style; new code should follow that pattern.
+
+A few other things you'll see consistently:
+
+- **Each component subclasses `WeaverletComponent`**, implements `get_layout`, and (when it has callbacks) `register_callbacks(self, app)`.
+- **IDs are class-level `Identifier()` descriptors**, accessed as `self.<identifier>` inside layouts and callbacks. Never string literals.
+- **Callbacks use `dash_extensions.enrich`** (`Input`, `Output`, `Trigger`, `Serverside`) rather than `dash.dependencies`. `WeaverletApp.app` is a `DashProxy`, so the enrich types unlock `group=` multi-output, server-side caching, etc.
+
+See [Components](../concepts/components) for the full contract.

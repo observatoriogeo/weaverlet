@@ -1,0 +1,69 @@
+---
+title: "02: Echo"
+sidebar_label: "02: Echo"
+---
+
+# 02: Echo
+
+> An input that echoes whatever the user types. Introduces the two patterns that show up in every Weaverlet app from here on: declaring IDs with `Identifier()`, and registering callbacks via `register_callbacks(self, app)`.
+
+## The script
+
+```python
+from weaverlet.base import WeaverletComponent, WeaverletApp, Identifier
+from dash.dependencies import Input, Output
+from dash import html, dcc
+
+
+class EchoComponent(WeaverletComponent):
+
+    text_input_id = Identifier()
+    echo_div_id = Identifier()
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def get_layout(self):
+        return html.Div([
+            dcc.Input(id=self.text_input_id,
+                      type='text'),
+            html.Div(id=self.echo_div_id)
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(
+            Output(self.echo_div_id, 'children'),
+            Input(self.text_input_id, 'value')
+        )
+        def update_echo_div(text_value):
+            return f'{text_value}'
+
+
+greeting_component = EchoComponent()
+wapp = WeaverletApp(root_component=greeting_component)
+wapp.app.run(port=8089)
+```
+
+## Expected output
+
+Typing into the input field updates the `<div>` underneath in real time.
+
+## Notes
+
+- `Identifier()` is a class-level descriptor. `self.text_input_id` returns a unique Dash ID per `EchoComponent` instance. Instantiate twice and the two copies don't collide.
+- Callbacks always live inside `register_callbacks(self, app)`. `app` is `WeaverletApp.app`, a `DashProxy` under the hood. So `Trigger`, `Serverside(...)`, and `group=` multi-output callbacks all work without extra setup.
+- Reference IDs as `self.<identifier>`, never as string literals.
+- This script imports `Input` and `Output` from `dash.dependencies`. The modern import is `from dash_extensions.enrich import Input, Output`: it unlocks the enrich-only features above. Both forms work; prefer the enrich import in new code.
+
+## Try it locally
+
+```bash
+pip install weaverlet
+python echo.py
+```
+
+## See also
+
+- [`Identifier`: concept](../concepts/components)
+- [`Identifier`: API reference](../api/identifier)
+- [Quickstart](../quickstart). The same script with modern imports.

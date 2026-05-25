@@ -1,0 +1,137 @@
+---
+title: RedirectComponent
+sidebar_label: RedirectComponent
+---
+
+# `RedirectComponent`
+
+Client-side navigation primitive. Render one in a layout, then return a navigation dict to it from a callback to navigate the browser.
+
+```python
+from weaverlet import RedirectComponent
+```
+
+## Signature
+
+```python
+class RedirectComponent(WeaverletComponent):
+
+    href_id = Identifier()
+    href_attr: str = 'data'
+    _dummy_div_id = Identifier()
+    _prefix_id = Identifier()
+    redirect_clientside_callback: str  # JS function string
+
+    def __init__(self, name: str = "unnamed", use_prefix: bool = False) -> None: ...
+```
+
+## Parameters
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `name` | `str` | `"unnamed"` | Component name. |
+| `use_prefix` | `bool` | `False` | If `True`, the redirect URL is prepended with the value of `context["prefix"]` on the client side. |
+
+## Public attributes
+
+| Attribute | Type | Description |
+|---|---|---|
+| `href_id` | `Identifier` | The `dcc.Store` whose `data` holds the navigation dict. Target this from your callback. |
+| `href_attr` | `str` (`'data'`) | The property name on the store; pair with `href_id` to form a Dash `Output`. |
+
+## Usage
+
+```python
+from weaverlet import WeaverletComponent, WeaverletApp, Identifier, RedirectComponent
+from dash_extensions.enrich import Output, Trigger
+from dash import html
+
+
+class Redirector(WeaverletComponent):
+    btn_id = Identifier()
+
+    def __init__(self):
+        super().__init__()
+        self.redirect = RedirectComponent()
+
+    def get_layout(self):
+        return html.Div([
+            self.redirect(),                            # render once
+            html.Button("Go", id=self.btn_id),
+        ])
+
+    def register_callbacks(self, app):
+        @app.callback(
+            Output(self.redirect.href_id, self.redirect.href_attr),
+            Trigger(self.btn_id, "n_clicks"),
+        )
+        def go():
+            return {"url": "/target", "target": "_self"}
+
+
+WeaverletApp(root_component=Redirector()).app.run()
+```
+
+## The redirect dict
+
+Return one of these to `Output(redirect.href_id, redirect.href_attr)`:
+
+```python
+{"url": "/target", "target": "_self"}
+{"url": "/target", "target": "_blank"}
+{"url": "https://example.com", "target": "_blank"}
+```
+
+| Key | Required | Values |
+|---|---|---|
+| `url` | Yes | Absolute or relative URL. |
+| `target` | Yes | `"_self"` (replace current tab), `"_blank"` (new tab), or any HTML `target` value. |
+
+The navigation happens via `window.open(url, target)` in the client-side callback. This means `_self` produces a full page navigation (the browser leaves the current document), and `_blank` opens in a new browser tab.
+
+## Prefixing
+
+```python
+self.redirect = RedirectComponent(use_prefix=True)
+```
+
+Combined with `WeaverletApp(context={"prefix": "/myapp"})`, a redirect to `/target` becomes a browser navigation to `/myapp/target`. The prefix is injected by the client-side JavaScript at navigation time. No Python-side string concatenation needed.
+
+If `use_prefix=True` and the `prefix` key is missing from `context`, `get_layout` raises `WeaverletException` at startup.
+
+## What gets rendered
+
+`get_layout` returns a small machinery:
+
+```python
+html.Div([
+    html.Div(id=self._dummy_div_id, style={"display": "none"}),    # callback target
+    dcc.Store(id=self._prefix_id, data={"prefix": <prefix>}),       # prefix data
+    dcc.Store(id=self.href_id),                                     # callback source
+])
+```
+
+A client-side callback wires `href_id.data` (Input) → `dummy_div_id.children` (Output), reading the prefix as State and calling `window.open` with the combined URL.
+
+## Pitfalls
+
+:::warning[Render `RedirectComponent` exactly once per layout]
+The component carries `Identifier()`s. Rendering its `get_layout()` twice in the same page would trigger `DuplicateIdError`. The natural location is whatever component owns the redirect logic; render it via `self.redirect()` once in that component's layout.
+
+If multiple components need to redirect, give each one its own `RedirectComponent` instance.
+:::
+
+:::warning[`_self` does a full-page navigation]
+The client-side handler uses `window.open(url, "_self")`, which leaves the current document. Any unsaved state in the page is lost. If you only need to update the URL without unloading the page, drive `dcc.Location.pathname` directly via a callback instead.
+:::
+
+:::warning[`target` is required]
+Even when targeting `_self`, you must include `target` in the dict. Omitting it produces an undefined-target navigation which may behave inconsistently across browsers.
+:::
+
+## See also
+
+- [Redirects. Concept](../routing/redirects)
+- [`AuthRouterComponent`](./auth-router). Uses `RedirectComponent` heavily in the login flow.
+- [Example 06: Redirect](../examples/redirect)
+- [Example 05: Auth router](../examples/auth-router)

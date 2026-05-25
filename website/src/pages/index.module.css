@@ -1,0 +1,100 @@
+.heroBanner {
+  padding: 4rem 0 3rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 2rem;
+  }
+}
+
+.heroLogo {
+  max-width: 220px;
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto 1.5rem;
+  /* The PNG itself carries a painted white outline around the W shape,
+     so we render it transparent without a CSS card/frame. */
+}
+
+.install {
+  max-width: 24rem;
+  margin: 1.5rem auto 2rem;
+  text-align: left;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Force white text + border on the outline buttons inside the hero,
+   since Infima's default outline-secondary text is dark and disappears
+   against the dark navy hero background. */
+.heroBanner :global(.button--outline.button--secondary) {
+  color: #ffffff;
+  border-color: #ffffff;
+}
+.heroBanner :global(.button--outline.button--secondary:hover) {
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: #ffffff;
+}
+
+/* Feature rows: alternating light/dark with text + code side-by-side. */
+.featureRow {
+  padding: 3.5rem 0;
+  background: var(--ifm-background-color);
+}
+
+.featureRowDark {
+  background: var(--ifm-color-emphasis-100);
+}
+
+.featureRowInner {
+  display: flex;
+  align-items: center;
+  gap: 3rem;
+  flex-wrap: wrap;
+}
+
+.featureRowText {
+  flex: 1;
+  min-width: 280px;
+}
+
+.featureRowCode {
+  flex: 1.2;
+  min-width: 320px;
+  max-width: 100%;
+}
+
+.featureRowTitle {
+  color: var(--ifm-color-primary);
+  margin-bottom: 1rem;
+}
+
+.featureRowCode pre {
+  margin: 0;
+}
+
+/* Final get-started callout. */
+.callout {
+  padding: 4rem 1rem;
+  text-align: center;
+  background: var(--ifm-background-color);
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.calloutInstall {
+  max-width: 24rem;
+  margin: 1.5rem auto 2rem;
+  text-align: left;
+}
